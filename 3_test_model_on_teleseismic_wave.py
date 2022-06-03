@@ -24,11 +24,12 @@ npts = 2400
 dt = 0.5
 gpu_num = 1
 devc=try_gpu(i=gpu_num)
-batch_size = 256
+batch_size = 128
 working_dir = './'
 #wave_mat = working_dir + 'wave_double_include_S_snr_100.mat'
 #wave_mat = working_dir + 'data_stacked_M6_plus_POHA.mat'
-wave_mat = working_dir + 'data_stacked_M6_plus_POHA_2Hz.mat'
+#wave_mat = working_dir + 'data_stacked_M6_plus_POHA_2Hz.mat'
+wave_mat = working_dir + 'data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
 model_dataset_dir = "Model_and_datasets_1D_all_snr_40"
 model_structure = "Branch_Encoder_Decoder"
 bottleneck_name = "LSTM"

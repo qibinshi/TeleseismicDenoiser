@@ -1,7 +1,5 @@
 # %%
-import os
 import h5py
-import copy
 import torch
 import random
 import numpy as np
@@ -10,22 +8,18 @@ from scipy.io import savemat, loadmat
 from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
-from torch_tools import WaveformDataset, EarlyStopping, try_gpu, training_loop, training_loop_branches
-from autoencoder_1D_models_torch import Autoencoder_Conv1D, Autoencoder_Conv2D, Attention_bottleneck, \
-    Attention_bottleneck_LSTM, SeismogramEncoder, SeismogramDecoder, SeisSeparator, Loc2Tel
+from torch_tools import WaveformDataset, try_gpu, training_loop_branches
+from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv
 
-gpu_num = 1
+gpu_num = 0
 devc = try_gpu(i=gpu_num)
-wave_mat = './data_stacked_M6_plus_POHA_2Hz.mat'
+wave_mat = './data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
 model_dir = 'Freeze_Model'
 mkdir(model_dir)
 progress_file = model_dir + '/Running_progress.txt'
 model_structure = "Branch_Encoder_Decoder"
 bottleneck_name = 'LSTM'
 model_name = model_structure + "_" + bottleneck_name
-
-# %% Recording progress to a text file
-write_progress(progress_file, text_contents="=" * 5 + " Working on " + bottleneck_name + "=" * 5 + '\n')
 
 # %% Read the pre-processed datasets
 print("#" * 12 + " Loading data " + "#" * 12)
@@ -36,41 +30,40 @@ train_size = 0.6  # 60% for training
 test_size = 0.5  # (1-60%) x 50% for testing
 rand_seed1 = 13
 rand_seed2 = 20
-X_training, X_test, Y_training, Y_test = train_test_split(X_train, Y_train, train_size=train_size,
-                                                          random_state=rand_seed1)
-X_validate, X_test, Y_validate, Y_test = train_test_split(X_test, Y_test, test_size=test_size, random_state=rand_seed2)
+X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
+X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test, test_size=test_size, random_state=rand_seed2)
 # %% Convert to the torch class, use WaveformDataset_h5 for small memory
 training_data = WaveformDataset(X_training, Y_training)
 validate_data = WaveformDataset(X_validate, Y_validate)
 
 # %% Give a fixed seed for model initialization
-# torch.manual_seed(99)
-# random.seed(0)
-# np.random.seed(20)
-# torch.backends.cudnn.benchmark = False
+torch.manual_seed(99)
+random.seed(0)
+np.random.seed(20)
+torch.backends.cudnn.benchmark = False
 
 # %% Set up model network
-print("#" * 12 + " Building model " + model_name + " " + "#" * 12)
-# encoder = SeismogramEncoder()
-# bottleneck = torch.nn.LSTM(64, 32, 2, bidirectional=True, batch_first=True, dtype=torch.float64)
-# bottleneck_quake = copy.deepcopy(bottleneck)
-# bottleneck_noise = copy.deepcopy(bottleneck)
-# decoder_quake = SeismogramDecoder(bottleneck=bottleneck_quake)
-# decoder_noise = SeismogramDecoder(bottleneck=bottleneck_noise)
-# model = SeisSeparator(model_name, encoder, decoder_quake, decoder_noise).to(devc)
+print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
-model_post = Loc2Tel(600, 2400)
+Linear_pre1 = InputLinear(2400, 1200)
+Linear_pre2 = InputLinear(1200, 600)
+Conv_pre1   = InputConv(3, 3, 1, 'same')
+Conv_pre2   = InputConv(3, 3, 4, 4)
+Linear_post1= OutputLinear(1200, 2400)
+Linear_post2= OutputLinear(600, 1200)
+Dconv_post1 = OutputDconv(3, 3, 1, 4, 0)
+Dconv_post2 = OutputDconv(3, 3, 4, 3, 1)
 
 for param in model.parameters():
     param.requires_grad = False
-model = torch.nn.Sequential(torch.nn.Linear(2400, 600, dtype=torch.float64), torch.nn.ReLU(), model, model_post)
-# model = torch.nn.Sequential(torch.nn.Conv1d(3, 3, 9, padding='same', dtype=torch.float64), torch.nn.ReLU(), model)
-# for idx, param in enumerate(model.parameters()):
-#     if not param.requires_grad:
-#         print(idx, param.shape)
+model = torch.nn.Sequential(Conv_pre1, Linear_pre1, Linear_pre2, model, Linear_post2, Linear_post1, Dconv_post1).to(devc)
+
+for idx, param in enumerate(model.parameters()):
+    if not param.requires_grad:
+        print(idx, param.shape)
 # %% Tune training parameters
-batch_size, epochs, lr = 32, 200, 1e-3
+batch_size, epochs, lr = 256, 200, 1e-3
 minimum_epochs = 30
 patience = 8  # for early stopping
 loss_fn = torch.nn.MSELoss()

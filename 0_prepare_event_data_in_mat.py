@@ -70,5 +70,5 @@ for ev in cat:
     elapseT = time.time() - since
     idx_event = idx_event + 1
     print(evnm, "--------", idx_event, "events", idx_trace, "traces processed.", "Time elapsed: %.2f s" % elapseT)
-savemat("wave_double_include_S_snr_100_2Hz.mat", {"allwv": allwv})
+savemat("wave_double_include_S_2010_18_snr_100_2Hz.mat", {"allwv": allwv})
 print("Total traces of data:", len(allwv))

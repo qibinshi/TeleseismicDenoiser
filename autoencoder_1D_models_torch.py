@@ -445,7 +445,31 @@ class Attention_bottleneck_LSTM(nn.Module):
         X = self.attention(X, X, X)  # self attention
         return X
 
-class Loc2Tel(nn.Module):
+
+
+### The input adaptors for Teleseismic waves (author: Qibin Shi)
+class InputLinear(nn.Module):
+    def __init__(self, insize, outsize):
+        super().__init__()
+        self.fc1 = nn.Linear(insize, outsize, dtype=torch.float64)
+        self.bn1 = nn.BatchNorm1d(3, dtype=torch.float64)
+
+    def forward(self, x):
+        y = F.relu(self.bn1(self.fc1(x)))
+        return y
+
+class InputConv(nn.Module):
+    def __init__(self, insize, outsize, dsamp, pad):
+        super().__init__()
+        self.enc1 = nn.Conv1d(insize, outsize, 9, stride=dsamp, padding=pad, dtype=torch.float64)
+        self.bn1 = nn.BatchNorm1d(outsize, dtype=torch.float64)
+
+    def forward(self, x):
+        y = F.relu(self.bn1(self.enc1(x)))
+        return y
+
+### The output adatptors for teleseismic waves (author: Qibin Shi)
+class OutputLinear(nn.Module):
     def __init__(self, insize, outsize):
         super().__init__()
         self.fc1 = nn.Linear(insize, outsize, dtype=torch.float64)
@@ -456,7 +480,21 @@ class Loc2Tel(nn.Module):
     def forward(self, x0):
         x1 = x0[0]
         x2 = x0[1]
-        x = self.fc1(F.relu(x1))
-        y = self.fc2(F.relu(x2))
+        x = self.bn1(self.fc1(F.relu(x1)))
+        y = self.bn2(self.fc2(F.relu(x2)))
+        return x, y
 
+class OutputDconv(nn.Module):
+    def __init__(self, insize, outsize, usamp, pad, opad):
+        super().__init__()
+        self.dec1 = nn.ConvTranspose1d(insize, outsize, 9, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
+        self.dec2 = nn.ConvTranspose1d(insize, outsize, 9, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
+        self.bn1 = nn.BatchNorm1d(outsize, dtype=torch.float64)
+        self.bn2 = nn.BatchNorm1d(outsize, dtype=torch.float64)
+
+    def forward(self, x0):
+        x1 = x0[0]
+        x2 = x0[1]
+        x = self.bn1(self.dec1(F.relu(x1)))
+        y = self.bn2(self.dec2(F.relu(x2)))
         return x, y

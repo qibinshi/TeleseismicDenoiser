@@ -19,8 +19,8 @@ from torch_tools import WaveformDataset, try_gpu
 # %%
 in_pts = 2400
 shuffle_phase = False
-model_dataset = './data_stacked_M6_plus_POHA_2Hz.mat'
-cleanwave_mat = './wave_double_include_S_snr_100_2Hz.mat'
+model_dataset = './data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
+cleanwave_mat = './wave_double_include_S_2010_18_snr_100_2Hz.mat'
 waveform_mseed = '../WaveDecompNet-paper/work/continuous_waveforms/IU.POHA.00.20210731-20210901.mseed'
 
 # %% Load continuous waveform
@@ -38,13 +38,15 @@ for i in range(3):
 # %% Extract 600 multiples of noise points by median amplitude
 amplitude_series = np.sqrt(np.sum(waveform0 ** 2, axis=1))
 amplitude_median = np.nanmedian(amplitude_series)
-noise0 = waveform0[amplitude_series < (6 * amplitude_median), :]
+noise0 = waveform0[amplitude_series < (5 * amplitude_median), :]
 noise0 = noise0[np.newaxis, :(noise0.shape[0] // in_pts * in_pts), :]
 if shuffle_phase:
     noise = randomization_noise(noise0)
 else:
     noise = noise0
 noise = np.reshape(noise, (-1, in_pts, 3))
+noise = np.append(noise, noise, axis=0)
+noise = np.append(noise, noise, axis=0)
 noise = np.append(noise, noise, axis=0)
 
 # %% Stack with M6 teleseismic waveforms
@@ -53,7 +55,7 @@ N_traces = min(noise.shape[0], wv.shape[0])
 print(N_traces, "traces totally")
 snr_seed = 111
 rng_snr = default_rng(snr_seed)
-snr = 10 ** rng_snr.uniform(-1, 0.5, N_traces)
+snr = 10 ** rng_snr.uniform(-1, 1, N_traces)
 stack_waves = np.zeros((N_traces, in_pts, 3), dtype=np.double)
 quake_waves = np.zeros((N_traces, in_pts, 3), dtype=np.double)
 for i in range(N_traces):

@@ -1,8 +1,0 @@
-===== Working on LSTM=====
-Training is done!
-===== Working on LSTM=====
-Training is done!
-===== Working on LSTM=====
-Training is done!
-===== Working on LSTM=====
-Training is done!

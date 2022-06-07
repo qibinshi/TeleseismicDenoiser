@@ -1,3 +1,8 @@
+"""
+@author: Jiuxun Yin
+modified by Qibin Shi
+"""
+
 import os
 import numpy as np
 import scipy.signal as sgn

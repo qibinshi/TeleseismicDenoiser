@@ -1,3 +1,9 @@
+"""
+@author: Qibin Shi
+qibins@uw.edu
+"""
+## modified from distaz.c
+
 import math
 
 class DistAz:

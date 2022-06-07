@@ -1,3 +1,8 @@
+"""
+@author1: Jiuxun Yin
+@author2: Qibin Shi
+qibins@uw.edu
+"""
 # import keras
 # from keras.models import Sequential, Model
 # from keras.layers import Conv1D, AveragePooling1D, MaxPooling1D, UpSampling1D, LeakyReLU, Conv1DTranspose, \

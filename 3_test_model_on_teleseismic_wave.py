@@ -1,4 +1,8 @@
-##### using Jiuxun Yin's code to plot 
+"""
+@author: Qibin Shi
+qibins@uw.edu
+"""
+##### Using Jiuxun Yin's plotting codes 
 
 import os
 import h5py
@@ -20,7 +24,7 @@ from sklearn.metrics import mean_squared_error, explained_variance_score
 matplotlib.rcParams.update({'font.size': 9})
 
 # %%
-npts = 2400
+npts = 1200
 dt = 0.5
 gpu_num = 1
 devc=try_gpu(i=gpu_num)
@@ -29,7 +33,7 @@ working_dir = './'
 #wave_mat = working_dir + 'wave_double_include_S_snr_100.mat'
 #wave_mat = working_dir + 'data_stacked_M6_plus_POHA.mat'
 #wave_mat = working_dir + 'data_stacked_M6_plus_POHA_2Hz.mat'
-wave_mat = working_dir + 'data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
+wave_mat = working_dir + 'data_stacked_Ponly_M6_2004_18_shallow_plus_POHA_sample2Hz_freq0.5Hz.mat'
 model_dataset_dir = "Model_and_datasets_1D_all_snr_40"
 model_structure = "Branch_Encoder_Decoder"
 bottleneck_name = "LSTM"

@@ -1,3 +1,7 @@
+"""
+@author: Qibin Shi, modified from Jiuxun Yin's WaveDecompNet training script
+qibins@uw.edu
+"""
 # %%
 import h5py
 import torch
@@ -8,69 +12,77 @@ from scipy.io import savemat, loadmat
 from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
-from torch_tools import WaveformDataset, try_gpu, training_loop_branches
+from torch_tools import WaveformDataset, try_gpu, training_loop_branches, CCLoss, CCMSELoss
 from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv
 
 gpu_num = 0
 devc = try_gpu(i=gpu_num)
-wave_mat = './data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
-model_dir = 'Freeze_Model'
-mkdir(model_dir)
-progress_file = model_dir + '/Running_progress.txt'
-model_structure = "Branch_Encoder_Decoder"
 bottleneck_name = 'LSTM'
+model_dir = 'Freeze_Model'
+model_structure = "Branch_Encoder_Decoder"
+progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
-
+wave_mat = './data_stacked_Ponly_M6_2004_18_shallow_plus_POHA_sample2Hz_freq0.5Hz.mat'
+mkdir(model_dir)
 # %% Read the pre-processed datasets
 print("#" * 12 + " Loading data " + "#" * 12)
 X_train = loadmat(wave_mat)["stack_waves"]
 Y_train = loadmat(wave_mat)["quake_waves"]
 
-train_size = 0.6  # 60% for training
-test_size = 0.5  # (1-60%) x 50% for testing
+train_size = 0.8  # 60% for training
+test_size = 0.5  # (1-80%) x 50% for testing
 rand_seed1 = 13
 rand_seed2 = 20
 X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
 X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test, test_size=test_size, random_state=rand_seed2)
-# %% Convert to the torch class, use WaveformDataset_h5 for small memory
+# %% Convert to torch class. Or WaveformDataset_h5 for limited memory
 training_data = WaveformDataset(X_training, Y_training)
 validate_data = WaveformDataset(X_validate, Y_validate)
 
 # %% Give a fixed seed for model initialization
-torch.manual_seed(99)
 random.seed(0)
 np.random.seed(20)
+torch.manual_seed(99)
 torch.backends.cudnn.benchmark = False
 
-# %% Set up model network
+# %% Set up Neural Net structure
 print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
+Linear_pre0 = InputLinear(600, 600)
 Linear_pre1 = InputLinear(2400, 1200)
 Linear_pre2 = InputLinear(1200, 600)
-Conv_pre1   = InputConv(3, 3, 1, 'same')
-Conv_pre2   = InputConv(3, 3, 4, 4)
+Conv3 = InputConv(8, 3, 1, 'same')
+Conv2 = InputConv(8, 8, 2, 4)
+Conv1 = InputConv(3, 8, 1, 'same')
+Conv0 = InputConv(3, 3, 4, 4)
+Linear_post0= OutputLinear(600, 600)
 Linear_post1= OutputLinear(1200, 2400)
 Linear_post2= OutputLinear(600, 1200)
-Dconv_post1 = OutputDconv(3, 3, 1, 4, 0)
-Dconv_post2 = OutputDconv(3, 3, 4, 3, 1)
+Dconv3 = OutputDconv(3, 8, 1, 4, 0)
+Dconv2 = OutputDconv(8, 8, 2, 4, 1)
+Dconv1 = OutputDconv(8, 3, 1, 4, 0)
+Dconv0 = OutputDconv(3, 3, 4, 3, 1)
 
 for param in model.parameters():
     param.requires_grad = False
-model = torch.nn.Sequential(Conv_pre1, Linear_pre1, Linear_pre2, model, Linear_post2, Linear_post1, Dconv_post1).to(devc)
+
+model = torch.nn.Sequential(Conv1, Conv2, Conv3, Linear_pre0, model, Linear_post0, Dconv3, Dconv2, Dconv1).to(devc)
 
 for idx, param in enumerate(model.parameters()):
     if not param.requires_grad:
         print(idx, param.shape)
-# %% Tune training parameters
+
+# %% Hyper-parameters for training
 batch_size, epochs, lr = 256, 200, 1e-3
-minimum_epochs = 30
-patience = 8  # for early stopping
-loss_fn = torch.nn.MSELoss()
+minimum_epochs, patience = 30, 8  # patience for early stopping
+#loss_fn = torch.nn.MSELoss()
+loss_fn = CCMSELoss()
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 train_iter = DataLoader(training_data, batch_size=batch_size, shuffle=False)
 validate_iter = DataLoader(validate_data, batch_size=batch_size, shuffle=False)
 
+# %% Loop for training
 print("#" * 12 + " training model " + model_name + " " + "#" * 12)
 
 model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches(train_iter, validate_iter,
@@ -84,9 +96,9 @@ write_progress(progress_file, text_contents="Training is done!" + '\n')
 # %% Save the model
 torch.save(model, model_dir + f'/{model_name}_Model.pth')
 
+# %% Save the training history
 loss = avg_train_losses
 val_loss = avg_valid_losses
-# %% Save the training history
 with h5py.File(model_dir + f'/{model_name}_Training_history.hdf5', 'w') as f:
     f.create_dataset("loss", data=loss)
     f.create_dataset("val_loss", data=val_loss)

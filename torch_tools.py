@@ -1,3 +1,8 @@
+"""
+@author1: Jiuxun Yin
+@author2: Qibin Shi
+qibins@uw.edu
+"""
 import torch
 from torch.utils.data import Dataset
 import os
@@ -317,3 +322,31 @@ def model_same(model1, model2):
             return False
         else:
             return True
+
+### Use cross-correlation coeffcient as loss function (author: Qibin Shi)
+class CCLoss(torch.nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super().__init__()
+
+    def forward(self, inputs, targets):
+        cc = torch.sum(torch.mul(inputs, targets), dim=2)
+        n1 = torch.sum(torch.square(inputs), dim=2)
+        n2 = torch.sum(torch.square(targets), dim=2)
+        cc = cc / torch.sqrt(n1 * n2)
+
+        return 1 - torch.nanmean(cc)
+
+### Hybrid loss of cross-correlation coeffcient and MSE (author: Qibin Shi)
+class CCMSELoss(torch.nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super().__init__()
+
+    def forward(self, inputs, targets):
+        cc = torch.sum(torch.mul(inputs, targets), dim=2)
+        n1 = torch.sum(torch.square(inputs), dim=2)
+        n2 = torch.sum(torch.square(targets), dim=2)
+        cc = cc / torch.sqrt(n1 * n2)
+
+        mse = torch.mean(torch.square(inputs - targets), dim=2)
+
+        return torch.nanmean(mse) + 1 - torch.nanmean(cc)

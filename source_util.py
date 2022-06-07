@@ -1,3 +1,8 @@
+"""
+@author: Qibin Shi
+qibins@uw.edu
+"""
+## Codes created for moment tensor prediction
 from math import sin, cos, pi
 import matplotlib.pyplot as plt
 from obspy.imaging.beachball import beach

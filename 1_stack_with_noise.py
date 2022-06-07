@@ -1,3 +1,7 @@
+"""
+@author: Qibin Shi
+qibins@uw.edu
+"""
 # %%
 import os
 import h5py
@@ -17,15 +21,15 @@ from utilities import downsample_series, mkdir, randomization_noise
 from torch_tools import WaveformDataset, try_gpu
 
 # %%
-in_pts = 2400
+in_pts = 1200
 shuffle_phase = False
-model_dataset = './data_stacked_M6_2010_18_plus_POHA_2Hz.mat'
-cleanwave_mat = './wave_double_include_S_2010_18_snr_100_2Hz.mat'
+model_dataset = './data_stacked_Ponly_M6_2004_18_shallow_snr_25_plus_POHA_sample2Hz_freq0.5Hz.mat'
+cleanwave_mat = './wave_double_Ponly_2004_18_shallow_snr_25_sample2Hz_freq0.5Hz.mat'
 waveform_mseed = '../WaveDecompNet-paper/work/continuous_waveforms/IU.POHA.00.20210731-20210901.mseed'
 
 # %% Load continuous waveform
 tr = obspy.read(waveform_mseed)
-tr.filter("lowpass", freq=0.99)
+tr.filter("lowpass", freq=0.5)
 tr.resample(2)
 tr.merge(fill_value=np.nan)
 tr = trim_align(tr)

@@ -1,35 +1,37 @@
 """
-@author: Qibin Shi, modified from Jiuxun Yin's WaveDecompNet training script
-qibins@uw.edu
+Transfer learning by adding input and output layers
+to the pre-trained WaveDecompNet in the middle
+
+@auther: Qibin Shi (qibins@uw.edu)
 """
-# %%
 import h5py
 import torch
 import random
 import numpy as np
+from scipy.io import loadmat
 from matplotlib import pyplot as plt
-from scipy.io import savemat, loadmat
 from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
-from torch_tools import WaveformDataset, try_gpu, training_loop_branches, CCLoss, CCMSELoss
+from torch_tools import WaveformDataset, try_gpu, training_loop_branches, CCMSELoss
 from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv
 
+# %%
 gpu_num = 0
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
-model_dir = 'Freeze_Model'
+model_dir = 'Freeze_Middle'
 model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
-wave_mat = './data_stacked_Ponly_M6_2004_18_shallow_plus_POHA_sample2Hz_freq0.5Hz.mat'
+wave_mat = './data_stacked_POHA_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
 mkdir(model_dir)
 # %% Read the pre-processed datasets
 print("#" * 12 + " Loading data " + "#" * 12)
 X_train = loadmat(wave_mat)["stack_waves"]
 Y_train = loadmat(wave_mat)["quake_waves"]
 
-train_size = 0.8  # 60% for training
+train_size = 0.6  # 60% for training
 test_size = 0.5  # (1-80%) x 50% for testing
 rand_seed1 = 13
 rand_seed2 = 20
@@ -49,25 +51,28 @@ torch.backends.cudnn.benchmark = False
 print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
+
 Linear_pre0 = InputLinear(600, 600)
 Linear_pre1 = InputLinear(2400, 1200)
 Linear_pre2 = InputLinear(1200, 600)
-Conv3 = InputConv(8, 3, 1, 'same')
-Conv2 = InputConv(8, 8, 2, 4)
-Conv1 = InputConv(3, 8, 1, 'same')
-Conv0 = InputConv(3, 3, 4, 4)
-Linear_post0= OutputLinear(600, 600)
-Linear_post1= OutputLinear(1200, 2400)
-Linear_post2= OutputLinear(600, 1200)
-Dconv3 = OutputDconv(3, 8, 1, 4, 0)
-Dconv2 = OutputDconv(8, 8, 2, 4, 1)
-Dconv1 = OutputDconv(8, 3, 1, 4, 0)
-Dconv0 = OutputDconv(3, 3, 4, 3, 1)
+Conv0 = InputConv(3, 3, 9, 4, 4)
+Conv1 = InputConv(3, 8, 9, 1, 'same')
+Conv2 = InputConv(8, 8, 9, 2, 4)
+Conv3 = InputConv(8, 8, 9, 1, 'same')
+Conv4 = InputConv(8, 3, 9, 1, 'same')
+Dconv4 = OutputDconv(3, 8, 9, 1, 4, 0)
+Dconv3 = OutputDconv(8, 8, 9, 1, 4, 0)
+Dconv2 = OutputDconv(8, 8, 9, 2, 4, 1)
+Dconv1 = OutputDconv(8, 3, 9, 1, 4, 0)
+Dconv0 = OutputDconv(3, 3, 9, 4, 3, 1)
+Linear_post2 = OutputLinear(600, 1200)
+Linear_post1 = OutputLinear(1200, 2400)
+Linear_post0 = OutputLinear(600, 600)
 
 for param in model.parameters():
     param.requires_grad = False
 
-model = torch.nn.Sequential(Conv1, Conv2, Conv3, Linear_pre0, model, Linear_post0, Dconv3, Dconv2, Dconv1).to(devc)
+model = torch.nn.Sequential(Conv1, Conv2, Conv4, Linear_pre2, model, Linear_post2, Dconv4, Dconv2, Dconv1).to(devc)
 
 for idx, param in enumerate(model.parameters()):
     if not param.requires_grad:

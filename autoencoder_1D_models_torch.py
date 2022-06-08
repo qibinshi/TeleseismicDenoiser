@@ -1,22 +1,13 @@
 """
-@author1: Jiuxun Yin
-@author2: Qibin Shi
-qibins@uw.edu
+Model architectures
+
+@author: Jiuxun Yin
+modified by Qibin Shi
 """
-# import keras
-# from keras.models import Sequential, Model
-# from keras.layers import Conv1D, AveragePooling1D, MaxPooling1D, UpSampling1D, LeakyReLU, Conv1DTranspose, \
-#     BatchNormalization
-# from keras.layers import Conv2D, MaxPooling2D, UpSampling2D, LeakyReLU, Conv2DTranspose, Add, Input
-# from keras.layers import Dense, Dropout, Flatten
-# from keras.layers import LSTM, GRU, Bidirectional
-# import tensorflow as tf
-
-
-import torch
-from torch import nn
-import torch.nn.functional as F
 import math
+import torch
+import torch.nn.functional as F
+from torch import nn
 
 
 # Define the Encoder to extract figures from seismograms
@@ -464,9 +455,9 @@ class InputLinear(nn.Module):
         return y
 
 class InputConv(nn.Module):
-    def __init__(self, insize, outsize, dsamp, pad):
+    def __init__(self, insize, outsize, kernelsize, dsamp, pad):
         super().__init__()
-        self.enc1 = nn.Conv1d(insize, outsize, 9, stride=dsamp, padding=pad, dtype=torch.float64)
+        self.enc1 = nn.Conv1d(insize, outsize, kernelsize, stride=dsamp, padding=pad, dtype=torch.float64)
         self.bn1 = nn.BatchNorm1d(outsize, dtype=torch.float64)
 
     def forward(self, x):
@@ -490,10 +481,10 @@ class OutputLinear(nn.Module):
         return x, y
 
 class OutputDconv(nn.Module):
-    def __init__(self, insize, outsize, usamp, pad, opad):
+    def __init__(self, insize, outsize, kernelsize, usamp, pad, opad):
         super().__init__()
-        self.dec1 = nn.ConvTranspose1d(insize, outsize, 9, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
-        self.dec2 = nn.ConvTranspose1d(insize, outsize, 9, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
+        self.dec1 = nn.ConvTranspose1d(insize, outsize, kernelsize, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
+        self.dec2 = nn.ConvTranspose1d(insize, outsize, kernelsize, stride=usamp, padding=pad, output_padding=opad, dtype=torch.float64)
         self.bn1 = nn.BatchNorm1d(outsize, dtype=torch.float64)
         self.bn2 = nn.BatchNorm1d(outsize, dtype=torch.float64)
 

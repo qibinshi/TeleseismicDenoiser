@@ -1,36 +1,26 @@
 """
-@author: Qibin Shi
-qibins@uw.edu
+Stack clean earthquake signal with POHA noise
+
+@author: Qibin Shi (qibins@uw.edu)
 """
-# %%
-import os
-import h5py
 import obspy
-import torch
-import datetime
 import numpy as np
-import pandas as pd
 from source_util import trim_align
-from matplotlib import pyplot as plt
 from numpy.random import default_rng
-from torch.utils.data import DataLoader
-from scipy.interpolate import interp1d
-from scipy.fft import fft, fftfreq, ifft
 from scipy.io import savemat, loadmat
-from utilities import downsample_series, mkdir, randomization_noise
-from torch_tools import WaveformDataset, try_gpu
+from utilities import randomization_noise
 
 # %%
-in_pts = 1200
+in_pts = 6000
 shuffle_phase = False
-model_dataset = './data_stacked_Ponly_M6_2004_18_shallow_snr_25_plus_POHA_sample2Hz_freq0.5Hz.mat'
-cleanwave_mat = './wave_double_Ponly_2004_18_shallow_snr_25_sample2Hz_freq0.5Hz.mat'
+cleanwave_mat = './wave_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
+model_dataset = './data_stacked_POHA_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
 waveform_mseed = '../WaveDecompNet-paper/work/continuous_waveforms/IU.POHA.00.20210731-20210901.mseed'
 
 # %% Load continuous waveform
 tr = obspy.read(waveform_mseed)
-tr.filter("lowpass", freq=0.5)
-tr.resample(2)
+tr.filter("lowpass", freq=2.0)
+tr.resample(10)
 tr.merge(fill_value=np.nan)
 tr = trim_align(tr)
 dt = tr[0].stats.delta

@@ -1,30 +1,29 @@
 """
-@author: Qibin Shi
-qibins@uw.edu
+Use high signal-to-noise ratio teleseismic data
+to compose clean earthquake wiggles in MAT format
+
+@author: Qibin Shi (qibins@uw.edu)
 """
-# %%
-import os
 import glob
 import time
 import numpy as np
 from distaz import DistAz
 from scipy.io import savemat
 from obspy.taup import TauPyModel
-from source_util import trim_align
 from obspy import read_inventory, read
 from obspy import UTCDateTime, read_events
 
 # %%
+npts = 6000
 idx_trace = 0
 idx_event = 0
-npts = 1200
 workdir = 'event_data/M6/'
-cat = read_events(workdir + "*.xml")
-print(len(cat), "events totally")
 model = TauPyModel(model="iasp91")
 pre_filt = (0.004, 0.005, 10.0, 12.0)
 allwv = np.zeros((0, npts, 3), dtype=np.double)
 onewv = np.zeros((1, npts, 3), dtype=np.double)
+cat = read_events(workdir + "*.xml")
+print(len(cat), "events in total")
 
 since = time.time()
 ## %% Loop over event catalog
@@ -54,16 +53,16 @@ for ev in cat:
         #            st.remove_response(inventory=inv, output='VEL', pre_filt=pre_filt)
         #        except:
         #            continue
-        st.filter("lowpass", freq=0.5)
-        st.resample(2)
+        st.filter("lowpass", freq=2.0)
+        st.resample(10)
         st.merge(fill_value=np.nan)
         arrivals = model.get_travel_times(source_depth_in_km=evdp, distance_in_degree=distdeg, phase_list=['P'])
         tp = UTCDateTime(org_t + arrivals[0].time)
         st.trim(tp - 300.0, tp + 300.0)
 
         if len(st) == 3 and len(st[0].data) >= npts and len(st[1].data) >= npts and len(st[2].data) >= npts:
-            noise_amp = np.std(np.array(st[0].data)[0:595])
-            pwave_amp = np.std(np.array(st[0].data)[605:npts-1])
+            noise_amp = np.std(np.array(st[0].data)[0:2950])
+            pwave_amp = np.std(np.array(st[0].data)[3000:npts-1])
 
             if pwave_amp > (noise_amp * 25):
                 # st.rotate(method="NE->RT", back_azimuth=backazi)
@@ -75,5 +74,5 @@ for ev in cat:
     elapseT = time.time() - since
     idx_event = idx_event + 1
     print(evnm, "--------", idx_event, "events", idx_trace, "traces processed.", "Time elapsed: %.2f s" % elapseT)
-savemat("wave_double_Ponly_2004_18_shallow_snr_25_sample2Hz_freq0.5Hz.mat", {"allwv": allwv})
+savemat("wave_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat", {"allwv": allwv})
 print("Total traces of data:", len(allwv))

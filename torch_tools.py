@@ -1,15 +1,14 @@
 """
-@author1: Jiuxun Yin
-@author2: Qibin Shi
-qibins@uw.edu
-"""
-import torch
-from torch.utils.data import Dataset
-import os
-import h5py
-import numpy as np
-import time
+Useful tools using pytorch
 
+@author: Jiuxun Yin
+Modified by Qibin Shi
+"""
+import time
+import h5py
+import torch
+import numpy as np
+from torch.utils.data import Dataset
 
 class WaveformDataset(Dataset):
     def __init__(self, X_train, Y_train):
@@ -196,7 +195,7 @@ def training_loop(train_dataloader, validate_dataloader, model, loss_fn, optimiz
 
     return model, avg_train_losses, avg_valid_losses
 
-
+### Qibin added loss3 to measure the residual between the input and the sum of 2 outputs and
 def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs
                            , patience, device, minimum_epochs=None):
 
@@ -237,8 +236,9 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
             pred1, pred2 = model(X)
             loss1 = loss_fn(pred1, y)
             loss2 = loss_fn(pred2, X - y)
+            loss3 = loss_fn(pred1 + pred2, X)
 
-            loss = loss1 + loss2
+            loss = loss1 + loss2 + loss3
 
             # record training loss
             train_losses.append(loss.item())
@@ -258,11 +258,12 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
             pred1, pred2 = model(X)
             loss1 = loss_fn(pred1, y)
             loss2 = loss_fn(pred2, X - y)
+            loss3 = loss_fn(pred1 + pred2, X)
 
             #loss = loss1 + loss2
 
             # record validation loss
-            valid_losses.append(loss1.item() + loss2.item())
+            valid_losses.append(loss1.item() + loss2.item() + loss3.item())
             valid_losses1.append(loss1.item())
             valid_losses2.append(loss2.item())
 
@@ -323,7 +324,6 @@ def model_same(model1, model2):
         else:
             return True
 
-### Use cross-correlation coeffcient as loss function (author: Qibin Shi)
 class CCLoss(torch.nn.Module):
     def __init__(self, weight=None, size_average=True):
         super().__init__()
@@ -336,7 +336,6 @@ class CCLoss(torch.nn.Module):
 
         return 1 - torch.nanmean(cc)
 
-### Hybrid loss of cross-correlation coeffcient and MSE (author: Qibin Shi)
 class CCMSELoss(torch.nn.Module):
     def __init__(self, weight=None, size_average=True):
         super().__init__()

@@ -1,55 +1,50 @@
 """
-@author: Qibin Shi
-qibins@uw.edu
-"""
-##### Using Jiuxun Yin's plotting codes 
+Evaluate the trained model with the test dataset
 
-import os
+Qibin Shi modified from Jiuxun Yin's code
+"""
 import h5py
-import obspy
 import torch
-import datetime
 import matplotlib
 import numpy as np
-from obspy.geodetics import locations2degrees
-from obspy.taup import TauPyModel
-from numpy.random import default_rng
+from scipy.io import loadmat
+from utilities import waveform_fft
 from matplotlib import pyplot as plt
-from scipy.io import savemat, loadmat
 from torch.utils.data import DataLoader
 from torch_tools import WaveformDataset, try_gpu
-from utilities import downsample_series, mkdir, waveform_fft
-from sklearn.metrics import mean_squared_error, explained_variance_score
+from sklearn.metrics import explained_variance_score
+from sklearn.model_selection import train_test_split
 
 matplotlib.rcParams.update({'font.size': 9})
 
 # %%
-npts = 1200
-dt = 0.5
+dt = 0.1
+npts = 6000
+batch_size = 256
 gpu_num = 1
-devc=try_gpu(i=gpu_num)
-batch_size = 128
-working_dir = './'
-#wave_mat = working_dir + 'wave_double_include_S_snr_100.mat'
-#wave_mat = working_dir + 'data_stacked_M6_plus_POHA.mat'
-#wave_mat = working_dir + 'data_stacked_M6_plus_POHA_2Hz.mat'
-wave_mat = working_dir + 'data_stacked_Ponly_M6_2004_18_shallow_plus_POHA_sample2Hz_freq0.5Hz.mat'
-model_dataset_dir = "Model_and_datasets_1D_all_snr_40"
-model_structure = "Branch_Encoder_Decoder"
-bottleneck_name = "LSTM"
-model_name = model_structure + "_" + bottleneck_name
-model_dir = model_dataset_dir + f'/{model_name}'
+devc = try_gpu(i=gpu_num)
+wave_mat = './data_stacked_POHA_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
+model_name = "Branch_Encoder_Decoder_LSTM"
+model_dir = 'Freeze_Middle'
 comps = ['E', 'N', 'Z']
 
 # %% Read mat data
-stack_waves = loadmat(wave_mat)["stack_waves"]
-quake_waves = loadmat(wave_mat)["quake_waves"]
-waveform_data = WaveformDataset(stack_waves, quake_waves)
+X_train = loadmat(wave_mat)["stack_waves"]
+Y_train = loadmat(wave_mat)["quake_waves"]
+
+with h5py.File(model_dir + f'/{model_name}_Dataset_split.hdf5', 'r') as f:
+    train_size = f.attrs['train_size']
+    test_size = f.attrs['test_size']
+    rand_seed1 = f.attrs['rand_seed1']
+    rand_seed2 = f.attrs['rand_seed2']
+
+X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
+X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=test_size, random_state=rand_seed2)
+test_data = WaveformDataset(X_test, Y_test)
 
 # %% Model
-#model = torch.load(model_dir + '/' + f'{model_name}_Model.pth', map_location=devc)
-model = torch.load('./Freeze_Model/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
-test_iter = DataLoader(waveform_data, batch_size=batch_size, shuffle=False)
+model = torch.load('./Freeze_Middle/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
+test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 model.eval()
 
 # %% Predict the teleseismic waveforms of one batch
@@ -86,8 +81,8 @@ for i_model in range(20):
      
     ## Title, label and axes
     ax[0, 0].set_title("Original signal")
-    ax[0, 1].set_title("Earthquake signal (" + bottleneck_name + ")")
-    ax[0, 2].set_title("Separated noise (" + bottleneck_name + ")")
+    ax[0, 1].set_title("Earthquake signal")
+    ax[0, 2].set_title("Separated noise")
 
     for i in range(noisy_signal.shape[1]):
         ax[i, 0].set_ylabel(comps[i])

@@ -36,10 +36,11 @@ test_size = 0.5  # (1-80%) x 50% for testing
 rand_seed1 = 13
 rand_seed2 = 20
 X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
-X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test, test_size=test_size, random_state=rand_seed2)
+X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=test_size, random_state=rand_seed2)
 # %% Convert to torch class. Or WaveformDataset_h5 for limited memory
 training_data = WaveformDataset(X_training, Y_training)
 validate_data = WaveformDataset(X_validate, Y_validate)
+test_data     = WaveformDataset(X_test, Y_test)
 
 # %% Give a fixed seed for model initialization
 random.seed(0)
@@ -74,9 +75,13 @@ for param in model.parameters():
 
 model = torch.nn.Sequential(Conv1, Conv2, Conv4, Linear_pre2, model, Linear_post2, Dconv4, Dconv2, Dconv1).to(devc)
 
+n_para = 0
 for idx, param in enumerate(model.parameters()):
     if not param.requires_grad:
         print(idx, param.shape)
+    else:
+        n_para += np.prod(param.shape)
+print(f'Number of parameters to be trained: {n_para}\n')
 
 # %% Hyper-parameters for training
 batch_size, epochs, lr = 256, 200, 1e-3
@@ -86,6 +91,7 @@ loss_fn = CCMSELoss()
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 train_iter = DataLoader(training_data, batch_size=batch_size, shuffle=False)
 validate_iter = DataLoader(validate_data, batch_size=batch_size, shuffle=False)
+test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 # %% Loop for training
 print("#" * 12 + " training model " + model_name + " " + "#" * 12)
@@ -121,11 +127,24 @@ with h5py.File(model_dir + f'/{model_name}_Dataset_split.hdf5', 'w') as f:
     f.attrs['rand_seed1'] = rand_seed1
     f.attrs['rand_seed2'] = rand_seed2
 
+# Calculate the test loss
+test_loss = 0.0
+model.eval()
+for X, y in test_iter:
+    if len(y.data) != batch_size:
+        break
+    output1, output2 = model(X)
+    loss = loss_fn(output1, y) + loss_fn(output2, X - y)
+    test_loss += loss.item() * X.size(0)
+
+test_loss = test_loss/len(test_iter.dataset)
+
 # %% Show loss evolution when training is done
 plt.close('all')
 plt.figure()
 plt.plot(loss, 'o', label='loss')
 plt.plot(val_loss, '-', label='Validation loss')
+plt.plot([len(loss)], [test_loss], 'r*', label=f'Test loss = {test_loss:.4f}', markersize=10, linewidth=2, zorder=10)
 
 loss_name_list = ['earthquake train loss', 'earthquake valid loss', 'noise train loss', 'noise valid loss']
 loss_plot_list = ['o', '', 'o', '']

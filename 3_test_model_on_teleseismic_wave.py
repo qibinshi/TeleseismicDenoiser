@@ -8,9 +8,9 @@ import torch
 import matplotlib
 import numpy as np
 from scipy.io import loadmat
-from utilities import waveform_fft
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
+from utilities import waveform_fft, mkdir
 from torch_tools import WaveformDataset, try_gpu
 from sklearn.metrics import explained_variance_score
 from sklearn.model_selection import train_test_split
@@ -20,13 +20,14 @@ matplotlib.rcParams.update({'font.size': 9})
 # %%
 dt = 0.1
 npts = 6000
-batch_size = 256
+batch_size = 64
 gpu_num = 1
 devc = try_gpu(i=gpu_num)
 wave_mat = './data_stacked_POHA_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
 model_name = "Branch_Encoder_Decoder_LSTM"
 model_dir = 'Freeze_Middle'
 comps = ['E', 'N', 'Z']
+mkdir(model_dir + '/figures')
 
 # %% Read mat data
 X_train = loadmat(wave_mat)["stack_waves"]
@@ -43,7 +44,7 @@ X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=
 test_data = WaveformDataset(X_test, Y_test)
 
 # %% Model
-model = torch.load('./Freeze_Middle/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
+model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
 test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 model.eval()
 
@@ -76,8 +77,8 @@ for i_model in range(20):
         ax[i, 1].plot(time, denoised_signal[i_model, i, :]/scaling_factor, '-b', label='Predicted signal', linewidth=1)
         ax[i, 2].plot(time, true_noise[i_model, i, :] / scaling_factor, '-', color='gray', label='True noise', linewidth=1)
         ax[i, 2].plot(time, separated_noise[i_model, i, :] / scaling_factor, '-b',  label='Predicted noise', linewidth=1)
-        ax[i, 1].text(50, 0.8, f'EV: {evs_earthquake:.2f}')
-        ax[i, 2].text(50, 0.8, f'EV: {evs_noise:.2f}')
+        ax[i, 1].text(250, 0.8, f'EV: {evs_earthquake:.2f}')
+        ax[i, 2].text(250, 0.8, f'EV: {evs_noise:.2f}')
      
     ## Title, label and axes
     ax[0, 0].set_title("Original signal")
@@ -96,12 +97,13 @@ for i_model in range(20):
 
             if i==noisy_signal.shape[1]-1:
                 ax[i, j].xaxis.set_visible(True)
-                ax[i, j].set_xlim(0, npts*dt)
+                # ax[i, j].set_xlim(0, npts*dt)
+                ax[i, j].set_xlim(250, 400)
                 ax[i, j].spines['bottom'].set_visible(True)
                 ax[i, j].set_xlabel('time (s)')
 
     plt.figure(1)
-    plt.savefig(f'./Freeze_Model/figures/{model_name}_Prediction_waveform_model_{i_model}.pdf', bbox_inches='tight')
+    plt.savefig(model_dir + f'/figures/{model_name}_Prediction_waveform_model_{i_model}.pdf', bbox_inches='tight')
 
 # %% Plot spectrum
 for i_model in range(20):
@@ -130,4 +132,4 @@ for i_model in range(20):
     ax[0, 0].set_ylabel('velocity spectra', fontsize=14)
 #    ax[1, 0].set_ylabel('velocity spectra', fontsize=14)
     plt.figure(1)
-    plt.savefig(f'./Freeze_Model/figures/{model_name}_spectrum_{i_model}.pdf', bbox_inches='tight')
+    plt.savefig(model_dir + f'/figures/{model_name}_spectrum_{i_model}.pdf', bbox_inches='tight')

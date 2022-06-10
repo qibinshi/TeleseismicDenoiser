@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
 from torch_tools import WaveformDataset, try_gpu, training_loop_branches, CCMSELoss
-from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv
+from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv, T_model
 
 # %%
 gpu_num = 0
@@ -53,27 +53,31 @@ print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
 
-Linear_pre0 = InputLinear(600, 600)
+Linear_pre0 = InputLinear(750, 600)
 Linear_pre1 = InputLinear(2400, 1200)
 Linear_pre2 = InputLinear(1200, 600)
 Conv0 = InputConv(3, 3, 9, 4, 4)
-Conv1 = InputConv(3, 8, 9, 1, 'same')
-Conv2 = InputConv(8, 8, 9, 2, 4)
-Conv3 = InputConv(8, 8, 9, 1, 'same')
-Conv4 = InputConv(8, 3, 9, 1, 'same')
-Dconv4 = OutputDconv(3, 8, 9, 1, 4, 0)
-Dconv3 = OutputDconv(8, 8, 9, 1, 4, 0)
-Dconv2 = OutputDconv(8, 8, 9, 2, 4, 1)
-Dconv1 = OutputDconv(8, 3, 9, 1, 4, 0)
+Conv1 = InputConv(3, 8, 45, 1, 'same')
+Conv2 = InputConv(8, 8, 21, 2, 10)
+Conv3 = InputConv(8, 8, 21, 2, 10)
+Conv4 = InputConv(8, 8, 21, 2, 10)
+Conv5 = InputConv(8, 3, 9, 1, 'same')
+Dconv5 = OutputDconv(3, 8, 9, 1, 4, 0)
+Dconv4 = OutputDconv(8, 8, 21, 2, 10, 1)
+Dconv3 = OutputDconv(8, 8, 21, 2, 10, 1)
+Dconv2 = OutputDconv(8, 8, 21, 2, 10, 1)
+Dconv1 = OutputDconv(8, 3, 45, 1, 22, 0)
 Dconv0 = OutputDconv(3, 3, 9, 4, 3, 1)
 Linear_post2 = OutputLinear(600, 1200)
 Linear_post1 = OutputLinear(1200, 2400)
-Linear_post0 = OutputLinear(600, 600)
+Linear_post0 = OutputLinear(600, 750)
 
 for param in model.parameters():
     param.requires_grad = False
 
-model = torch.nn.Sequential(Conv1, Conv2, Conv4, Linear_pre2, model, Linear_post2, Dconv4, Dconv2, Dconv1).to(devc)
+# model = torch.nn.Sequential(Conv1, Conv2, Conv3, Conv4, Conv5, Linear_pre0, model,
+#                             Linear_post0, Dconv5, Dconv4, Dconv3, Dconv2, Dconv1).to(devc)
+model = T_model(model).to(devc)
 
 n_para = 0
 for idx, param in enumerate(model.parameters()):
@@ -84,8 +88,8 @@ for idx, param in enumerate(model.parameters()):
 print(f'Number of parameters to be trained: {n_para}\n')
 
 # %% Hyper-parameters for training
-batch_size, epochs, lr = 256, 200, 1e-3
-minimum_epochs, patience = 30, 8  # patience for early stopping
+batch_size, epochs, lr = 64, 200, 1e-4
+minimum_epochs, patience = 30, 15  # patience for early stopping
 #loss_fn = torch.nn.MSELoss()
 loss_fn = CCMSELoss()
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -131,11 +135,12 @@ with h5py.File(model_dir + f'/{model_name}_Dataset_split.hdf5', 'w') as f:
 test_loss = 0.0
 model.eval()
 for X, y in test_iter:
+    X, y = X.to(devc), y.to(devc)
     if len(y.data) != batch_size:
         break
     output1, output2 = model(X)
-    loss = loss_fn(output1, y) + loss_fn(output2, X - y)
-    test_loss += loss.item() * X.size(0)
+    loss_pred = loss_fn(output1, y) + loss_fn(output2, X - y) + loss_fn(output1 + output2, X)
+    test_loss += loss_pred.item() * X.size(0)
 
 test_loss = test_loss/len(test_iter.dataset)
 

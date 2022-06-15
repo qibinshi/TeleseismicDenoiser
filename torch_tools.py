@@ -8,6 +8,7 @@ import time
 import h5py
 import torch
 import numpy as np
+from numpy.random import default_rng
 from torch.utils.data import Dataset
 
 class WaveformDataset(Dataset):
@@ -90,15 +91,13 @@ class EarlyStopping:
         self.val_loss_min = val_loss
 
 
-# PyTorch
-# Try the new loss function
-class Explained_Variance_Loss(torch.nn.Module):
-    def __init__(self, weight=None, size_average=True):
-        super(Explained_Variance_Loss, self).__init__()
 
-    def forward(self, inputs, targets):
-        return torch.var(targets - inputs, dim=2, unbiased=True, keepdim=True) \
-               / torch.var(inputs, dim=2, unbiased=True, keepdim=True)
+class Explained_Variance_score(torch.nn.Module):
+    def __init__(self, weight=None, size_average=True):
+        super(Explained_Variance_score, self).__init__()
+
+    def forward(self, x, y):
+        return 1 - torch.var(x - y, dim=-1) * 2 / (torch.var(y, dim=-1) + 1.0)
 
 
 def try_gpu(i=0):  # @save
@@ -195,9 +194,10 @@ def training_loop(train_dataloader, validate_dataloader, model, loss_fn, optimiz
 
     return model, avg_train_losses, avg_valid_losses
 
-### Qibin added loss3 to measure the residual between the input and the sum of 2 outputs and
+### Qibin: add loss3 to measure the residual between the input and the sum of 2 outputs
+### Qibin: force model.eval not to calculate gradient
 def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs
-                           , patience, device, minimum_epochs=None):
+                           , patience, device, minimum_epochs=None, npts=3000):
 
     # to track the average training loss per epoch as the model trains
     avg_train_losses = []
@@ -230,9 +230,11 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
         # initialize the model for training
         model.train()
         size = len(train_dataloader.dataset)
-        for batch, (X, y) in enumerate(train_dataloader):
+        for batch, (X0, y0) in enumerate(train_dataloader):
+
+            X, y = X0.to(device), y0.to(device)
+
             # Compute prediction and loss
-            X, y = X.to(device), y.to(device)
             pred1, pred2 = model(X)
             loss1 = loss_fn(pred1, y)
             loss2 = loss_fn(pred2, X - y)
@@ -253,19 +255,199 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
         # ======================= validating =======================
         # initialize the model for training
         model.eval()
-        for X, y in validate_dataloader:
+        with torch.no_grad():
+            for X0, y0 in validate_dataloader:
+
+                X, y = X0.to(device), y0.to(device)
+
+                pred1, pred2 = model(X)
+                loss1 = loss_fn(pred1, y)
+                loss2 = loss_fn(pred2, X - y)
+                loss3 = loss_fn(pred1 + pred2, X)
+
+                loss = loss1 + loss2 + loss3
+
+                # record validation loss
+                valid_losses.append(loss.item())
+                valid_losses1.append(loss1.item())
+                valid_losses2.append(loss2.item())
+
+        # calculate average loss over an epoch
+        # total loss
+        train_loss = np.average(train_losses)
+        valid_loss = np.average(valid_losses)
+        avg_train_losses.append(train_loss)
+        avg_valid_losses.append(valid_loss)
+
+        # earthquake waveform loss
+        train_loss1 = np.average(train_losses1)
+        valid_loss1 = np.average(valid_losses1)
+        avg_train_losses1.append(train_loss1)
+        avg_valid_losses1.append(valid_loss1)
+
+        # ambient noise waveform loss
+        train_loss2 = np.average(train_losses2)
+        valid_loss2 = np.average(valid_losses2)
+        avg_train_losses2.append(train_loss2)
+        avg_valid_losses2.append(valid_loss2)
+
+        # print training/validation statistics
+        epoch_len = len(str(epochs))
+        print_msg = (f'[{epoch:>{epoch_len}}/{epochs:>{epoch_len}}] ' +
+                     f'train_loss: {train_loss:.5f} ' +
+                     f'valid_loss: {valid_loss:.5f}\n' +
+                     f'time per epoch: {(time.time() - starttime):.3f} s')
+
+        print(print_msg)
+
+        # clear lists to track next epoch
+        train_losses = []
+        valid_losses = []
+
+        if (minimum_epochs is None) or ((minimum_epochs is not None) and (epoch > minimum_epochs)):
+            # early_stopping needs the validation loss to check if it has decresed,
+            # and if it has, it will make a checkpoint of the current model
+            early_stopping(valid_loss, model)
+
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+        # load the last checkpoint with the best model
+    model.load_state_dict(torch.load('checkpoint.pt'))
+
+    partial_loss = [avg_train_losses1, avg_valid_losses1, avg_train_losses2, avg_valid_losses2]
+
+    return model, avg_train_losses, avg_valid_losses, partial_loss
+
+### Qibin: add loss3 to measure the residual between the input and the sum of 2 outputs
+### Qibin: force model.eval not to calculate gradient
+### Qibin: data augmemtation on the fly
+def training_loop_branches_augmentation(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs
+                           , patience, device, minimum_epochs=None, npts=3000):
+
+    # to track the average training loss per epoch as the model trains
+    avg_train_losses = []
+    avg_train_losses1 = []  # earthquake average loss with epoch
+    avg_train_losses2 = []  # noise average loss with epoch
+
+    # to track the average validation loss per epoch as the model trains
+    avg_valid_losses = []
+    avg_valid_losses1 = []  # earthquake average loss with epoch
+    avg_valid_losses2 = []  # noise average loss with epoch
+
+    # initialize the early_stopping object
+    early_stopping = EarlyStopping(patience=patience, verbose=True)
+
+    for epoch in range(1, epochs + 1):
+        # estimate time for each epoch
+        starttime = time.time()
+
+        # to track the training loss as the model trains
+        train_losses = []
+        train_losses1 = []  # earthquake loss
+        train_losses2 = []  # noise loss
+
+        # to track the validation loss as the model trains
+        valid_losses = []
+        valid_losses1 = []  # earthquake loss
+        valid_losses2 = []  # noise loss
+
+        # ======================= training =======================
+        # initialize the model for training
+        model.train()
+        size = len(train_dataloader.dataset)
+        for batch, (X0, y0) in enumerate(train_dataloader):
+            # stack and shift
+            nbatch = X0.size(0)
+            std_wgt = torch.ones(nbatch, dtype=torch.float64)
+            stack = torch.zeros(X0.size(), dtype=torch.float64)
+            quake = torch.zeros(X0.size(), dtype=torch.float64)
+            X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
+            y = torch.zeros(nbatch, y0.size(1), npts, dtype=torch.float64)
+            rng = default_rng(batch * epoch)
+            rng_snr = default_rng(batch * epoch + 1)
+            start_pt = rng.choice(y0.size(2) - npts, nbatch)
+            snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+
+            for i in np.arange(nbatch):
+                quake[i] = X0[i] * snr[i]
+                stack[i] = quake[i] + y0[i]
+                scale_mean = torch.mean(stack[i], dim=1)
+                scale_std = torch.std(stack[i], dim=1) + 1e-12
+                std_wgt[i] = torch.nanmean(scale_std)
+                X[i] = stack[i, :, start_pt[i]:start_pt[i] + npts]
+                y[i] = quake[i, :, start_pt[i]:start_pt[i] + npts]
+                for j in np.arange(X0.size(1)):
+                    X[i, j] = torch.div(torch.sub(X[i, j], scale_mean[j]), scale_std[j])
+                    y[i, j] = torch.div(torch.sub(y[i, j], scale_mean[j]), scale_std[j])
+
             X, y = X.to(device), y.to(device)
+            snr = torch.from_numpy(snr).to(device)
+            std_wgt = std_wgt.to(device)
+
+            # Compute prediction and loss
             pred1, pred2 = model(X)
-            loss1 = loss_fn(pred1, y)
+            loss1 = loss_fn(pred1, y, snr**2)
             loss2 = loss_fn(pred2, X - y)
-            loss3 = loss_fn(pred1 + pred2, X)
+            loss3 = loss_fn(pred1 + pred2, X, std_wgt**2)
 
             loss = loss1 + loss2 + loss3
 
-            # record validation loss
-            valid_losses.append(loss.item())
-            valid_losses1.append(loss1.item())
-            valid_losses2.append(loss2.item())
+            # record training loss
+            train_losses.append(loss.item())
+            train_losses1.append(loss1.item())
+            train_losses2.append(loss2.item())
+
+            # Backpropagation
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # ======================= validating =======================
+        # initialize the model for training
+        model.eval()
+        with torch.no_grad():
+            for X0, y0 in validate_dataloader:
+                # stack and shift
+                nbatch = X0.size(0)
+                std_wgt = torch.ones(nbatch, dtype=torch.float64)
+                stack = torch.zeros(X0.size(), dtype=torch.float64)
+                quake = torch.zeros(X0.size(), dtype=torch.float64)
+                X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
+                y = torch.zeros(nbatch, y0.size(1), npts, dtype=torch.float64)
+                rng = default_rng(batch * epoch)
+                rng_snr = default_rng(batch * epoch + 1)
+                start_pt = rng.choice(y0.size(2) - npts, nbatch)
+                snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+
+                for i in np.arange(nbatch):
+                    quake[i] = X0[i] * snr[i]
+                    stack[i] = quake[i] + y0[i]
+                    scale_mean = torch.mean(stack[i], dim=1)
+                    scale_std = torch.std(stack[i], dim=1) + 1e-12
+                    std_wgt[i] = torch.nanmean(scale_std)
+                    X[i] = stack[i, :, start_pt[i]:start_pt[i] + npts]
+                    y[i] = quake[i, :, start_pt[i]:start_pt[i] + npts]
+                    for j in np.arange(X0.size(1)):
+                        X[i, j] = torch.div(torch.sub(X[i, j], scale_mean[j]), scale_std[j])
+                        y[i, j] = torch.div(torch.sub(y[i, j], scale_mean[j]), scale_std[j])
+
+                X, y = X.to(device), y.to(device)
+                snr = torch.from_numpy(snr).to(device)
+                std_wgt = std_wgt.to(device)
+
+                pred1, pred2 = model(X)
+                loss1 = loss_fn(pred1, y, snr**2)
+                loss2 = loss_fn(pred2, X - y)
+                loss3 = loss_fn(pred1 + pred2, X, std_wgt**2)
+
+                loss = loss1 + loss2 + loss3
+
+                # record validation loss
+                valid_losses.append(loss.item())
+                valid_losses1.append(loss1.item())
+                valid_losses2.append(loss2.item())
 
         # calculate average loss over an epoch
         # total loss
@@ -328,24 +510,32 @@ class CCLoss(torch.nn.Module):
     def __init__(self, weight=None, size_average=True):
         super().__init__()
 
-    def forward(self, inputs, targets):
-        cc = torch.sum(torch.mul(inputs, targets), dim=2)
-        n1 = torch.sum(torch.square(inputs), dim=2)
-        n2 = torch.sum(torch.square(targets), dim=2)
+    def forward(self, x, y):
+        cc = torch.sum(torch.mul(x, y), dim=-1)
+        n1 = torch.sum(torch.square(x), dim=-1)
+        n2 = torch.sum(torch.square(y), dim=-1)
         cc = cc / torch.sqrt(n1 * n2)
 
         return 1 - torch.nanmean(cc)
 
 class CCMSELoss(torch.nn.Module):
-    def __init__(self, weight=None, size_average=True):
+    def __init__(self, use_weight=False):
         super().__init__()
+        self.use_weight = use_weight
 
-    def forward(self, inputs, targets):
-        cc = torch.sum(torch.mul(inputs, targets), dim=2)
-        n1 = torch.sum(torch.square(inputs), dim=2)
-        n2 = torch.sum(torch.square(targets), dim=2)
+    def forward(self, x, y, weight=1):
+        cc = torch.sum(torch.mul(x, y), dim=2)
+        n1 = torch.sum(torch.square(x), dim=2)
+        n2 = torch.sum(torch.square(y), dim=2)
         cc = cc / torch.sqrt(n1 * n2)
 
-        mse = torch.mean(torch.square(inputs - targets), dim=2)
+        mse = torch.mean(torch.square(x - y), dim=2)
 
-        return torch.nanmean(mse) + 1 - torch.nanmean(cc)
+        if self.use_weight:
+            cc = torch.nanmean(cc, dim=1)
+            mse = torch.nanmean(mse, dim=1)
+            ccmseloss = torch.nanmean(mse/weight) + 1 - torch.nanmean(cc)
+        else:
+            ccmseloss = torch.nanmean(mse) + 1 - torch.nanmean(cc)
+
+        return ccmseloss

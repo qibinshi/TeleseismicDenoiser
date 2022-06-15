@@ -510,13 +510,13 @@ class T_model(nn.Module):
         self.bn4 = nn.BatchNorm1d(8, dtype=torch.float64)
         self.enc5 = nn.Conv1d(8, 3, 9, stride=1, padding='same', dtype=torch.float64)
         self.bn5 = nn.BatchNorm1d(3, dtype=torch.float64)
-        self.fc6 = nn.Linear(3000, 600, dtype=torch.float64)
+        self.fc6 = nn.Linear(1500, 600, dtype=torch.float64)
         self.bn6 = nn.BatchNorm1d(3, dtype=torch.float64)
 
         self.model = model
 
-        self.fc61 = nn.Linear(600, 3000, dtype=torch.float64)
-        self.fc62 = nn.Linear(600, 3000, dtype=torch.float64)
+        self.fc61 = nn.Linear(600, 1500, dtype=torch.float64)
+        self.fc62 = nn.Linear(600, 1500, dtype=torch.float64)
         self.bn61 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.bn62 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.dec51 = nn.ConvTranspose1d(3, 8, 9, stride=1, padding=4, output_padding=0, dtype=torch.float64)
@@ -569,3 +569,79 @@ class T_model(nn.Module):
 
         return y1, y2
 
+class W_model(nn.Module):
+    def __init__(self, model):
+        super(W_model, self).__init__()
+
+        self.enc1 = nn.Conv1d(3, 8, 45, stride=1, padding='same', dtype=torch.float64)
+        self.bn1 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.enc2 = nn.Conv1d(8, 8, 21, stride=2, padding=10, dtype=torch.float64)
+        self.bn2 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.enc3 = nn.Conv1d(8, 8, 21, stride=2, padding=10, dtype=torch.float64)
+        self.bn3 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.enc4 = nn.Conv1d(8, 8, 21, stride=2, padding=10, dtype=torch.float64)
+        self.bn4 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.enc5 = nn.Conv1d(8, 3, 9, stride=1, padding='same', dtype=torch.float64)
+        self.bn5 = nn.BatchNorm1d(3, dtype=torch.float64)
+        self.fc6 = nn.Linear(3000, 600, dtype=torch.float64)
+        self.bn6 = nn.BatchNorm1d(3, dtype=torch.float64)
+
+        self.model = model
+
+        self.fc61 = nn.Linear(600, 3000, dtype=torch.float64)
+        self.fc62 = nn.Linear(600, 3000, dtype=torch.float64)
+        self.bn61 = nn.BatchNorm1d(3, dtype=torch.float64)
+        self.bn62 = nn.BatchNorm1d(3, dtype=torch.float64)
+        self.dec51 = nn.ConvTranspose1d(3, 8, 9, stride=1, padding=4, output_padding=0, dtype=torch.float64)
+        self.dec52 = nn.ConvTranspose1d(3, 8, 9, stride=1, padding=4, output_padding=0, dtype=torch.float64)
+        self.bn51 = nn.BatchNorm1d(16, dtype=torch.float64)
+        self.bn52 = nn.BatchNorm1d(16, dtype=torch.float64)
+        self.dec41 = nn.ConvTranspose1d(8, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.dec42 = nn.ConvTranspose1d(8, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.bn41 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.bn42 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.dec31 = nn.ConvTranspose1d(16, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.dec32 = nn.ConvTranspose1d(16, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.bn31 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.bn32 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.dec21 = nn.ConvTranspose1d(8, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.dec22 = nn.ConvTranspose1d(8, 8, 21, stride=2, padding=10, output_padding=1, dtype=torch.float64)
+        self.bn21 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.bn22 = nn.BatchNorm1d(8, dtype=torch.float64)
+        self.dec11 = nn.ConvTranspose1d(8, 3, 45, stride=1, padding=22, output_padding=0, dtype=torch.float64)
+        self.dec12 = nn.ConvTranspose1d(8, 3, 45, stride=1, padding=22, output_padding=0, dtype=torch.float64)
+        self.bn11 = nn.BatchNorm1d(3, dtype=torch.float64)
+        self.bn12 = nn.BatchNorm1d(3, dtype=torch.float64)
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.enc1(x)))
+        #x = F.relu(self.bn2(self.enc2(x)))
+        x0= self.enc3(x)
+        x = F.relu(self.bn3(x0))
+        #x = F.relu(self.bn4(self.enc4(x)))
+        x1= self.enc5(x)
+        x = F.relu(self.bn5(x1))
+        x = F.relu(self.bn6(self.fc6(x)))
+
+        y = self.model(x)
+        y1 = y[0]
+        y2 = y[1]
+
+        y1 = self.bn61(self.fc61(F.relu(y1)))
+        y2 = self.bn62(self.fc62(F.relu(y2)))
+        y1 = self.dec51(F.relu(y1))
+        y2 = self.dec52(F.relu(y2))
+        y1 = torch.cat((y1, x0), 1)
+        y2 = torch.cat((y2, x0), 1)
+        y1 = self.bn51(y1)
+        y2 = self.bn52(y2)
+        # y1 = self.bn41(self.dec41(F.relu(y1)))
+        # y2 = self.bn42(self.dec42(F.relu(y2)))
+        y1 = self.bn31(self.dec31(F.relu(y1)))
+        y2 = self.bn32(self.dec32(F.relu(y2)))
+        # y1 = self.bn21(self.dec21(F.relu(y1)))
+        # y2 = self.bn22(self.dec22(F.relu(y2)))
+        y1 = self.bn11(self.dec11(F.relu(y1)))
+        y2 = self.bn12(self.dec12(F.relu(y2)))
+
+        return y1, y2

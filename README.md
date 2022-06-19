@@ -1,5 +1,4 @@
-# The Architecture is two-branch autoencoder, or two U nets sharing the same encoder (W net).
-
+# Denoising earthquake waveforms using two-branch U net 
 To use the code: 
 1) Create a virtual environment in anaconda.
 ```

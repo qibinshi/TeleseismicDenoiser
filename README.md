@@ -1,6 +1,6 @@
 # Global Earthquake Denoiser  
 Splitting earthquake and noise waveforms using a two-branch U net trained with global teleseismic data.
-The neural network includes the pretrained [WaveDecompNet] (https://github.com/yinjiuxun/WaveDecompNet-paper/) for the higher level feature learning.
+The neural network includes the pretrained [WaveDecompNet](https://github.com/yinjiuxun/WaveDecompNet-paper/) for the higher level feature learning.
 
 ## Create a virtual environment in anaconda.
 ```

@@ -95,7 +95,7 @@ def download_waveforms(client, network, station, channel, location, starttime, e
     newtr.write(path + "/" + fname + ".mseed", format='MSEED')
     return newtr
 
-def randomization_noise(noise, rng=np.random.default_rng(None)):
+def randomization_noise(noise, dt, rng=np.random.default_rng(None)):
     """function to produce randomized noise by shifting the phase
     randomization_noise(noise, rng=np.random.default_rng(None))
     return randomized noise

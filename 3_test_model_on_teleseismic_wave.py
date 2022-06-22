@@ -9,6 +9,7 @@ import matplotlib
 import numpy as np
 from scipy.io import loadmat
 from matplotlib import pyplot as plt
+from numpy.random import default_rng
 from torch.utils.data import DataLoader
 from utilities import waveform_fft, mkdir
 from torch_tools import WaveformDataset, try_gpu
@@ -19,8 +20,8 @@ matplotlib.rcParams.update({'font.size': 9})
 
 # %%
 dt = 0.1
-npts = 6000
-batch_size = 64
+npts = 3000
+batch_size = 256
 gpu_num = 1
 devc = try_gpu(i=gpu_num)
 wave_mat = './data_stacked_POHA_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
@@ -48,24 +49,38 @@ model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth', map_loc
 test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 model.eval()
 
-# %% Predict the teleseismic waveforms of one batch
-data_iter = iter(test_iter)
-noisy_signal, clean_signal = data_iter.next()
-noisy_signal, clean_signal = noisy_signal.to(devc), clean_signal.to(devc)
-denoised_signal, separated_noise = model(noisy_signal)
+with torch.no_grad():
+    # %% Predict waveforms of the first batch
+    data_iter = iter(test_iter)
+    noisy_signal, clean_signal = data_iter.next()
+    noisy_signal, clean_signal = noisy_signal.to(devc), clean_signal.to(devc)
 
-noisy_signal = noisy_signal.detach().numpy()
-clean_signal = clean_signal.detach().numpy()
-denoised_signal = denoised_signal.detach().numpy()
-separated_noise = separated_noise.detach().numpy()
-true_noise = noisy_signal - clean_signal
+    # noisy_signal = torch.flip(noisy_signal, dims=[2])
+    # clean_signal = torch.flip(clean_signal, dims=[2])
+    rng = default_rng(11)
+    nbatch = noisy_signal.size(0)
+    noisy_input = torch.zeros(nbatch, noisy_signal.size(1), 3000, dtype=torch.float64)
+    quake_label = torch.zeros(nbatch, clean_signal.size(1), 3000, dtype=torch.float64)
+    start_pt = rng.choice(3000, nbatch)
+    for i in np.arange(nbatch):
+        noisy_input[i] = noisy_signal[i, :, start_pt[i]:start_pt[i]+3000]
+        quake_label[i] = clean_signal[i, :, start_pt[i]:start_pt[i]+3000]
+
+    denoised_signal, separated_noise = model(noisy_input)
+    true_noise = noisy_input - quake_label
+
+    noisy_signal = noisy_input.cpu().numpy()
+    clean_signal = quake_label.cpu().numpy()
+    separated_noise = separated_noise.cpu().numpy()
+    denoised_signal = denoised_signal.cpu().numpy()
+    true_noise = true_noise.cpu().numpy()
 
 # %% Plot time series
 time = np.arange(0, npts) * dt
-for i_model in range(20):
+for i_model in range(100):
     print(i_model, 'time series')
     plt.close("all")
-    fig, ax = plt.subplots(denoised_signal.shape[1], 3, sharex=True, sharey=True, num=1, figsize=(9, 3))
+    fig, ax = plt.subplots(denoised_signal.shape[1], 3, sharex=True, sharey=True, num=1, figsize=(12, 5))
 
     for i in range(noisy_signal.shape[1]):
         scaling_factor = np.max(abs(noisy_signal[i_model, i, :]))
@@ -97,8 +112,8 @@ for i_model in range(20):
 
             if i==noisy_signal.shape[1]-1:
                 ax[i, j].xaxis.set_visible(True)
-                # ax[i, j].set_xlim(0, npts*dt)
-                ax[i, j].set_xlim(250, 400)
+                ax[i, j].set_xlim(0, npts*dt)
+                # ax[i, j].set_xlim(250, 400)
                 ax[i, j].spines['bottom'].set_visible(True)
                 ax[i, j].set_xlabel('time (s)')
 
@@ -106,30 +121,29 @@ for i_model in range(20):
     plt.savefig(model_dir + f'/figures/{model_name}_Prediction_waveform_model_{i_model}.pdf', bbox_inches='tight')
 
 # %% Plot spectrum
-for i_model in range(20):
+for i_model in range(100):
     print(i_model, 'spectrum')
     plt.close("all")
     fig, ax = plt.subplots(2, denoised_signal.shape[1], sharex=True, sharey=True, num=1, figsize=(12, 5))
 
     for i in range(noisy_signal.shape[1]):
         scaling_factor = np.max(abs(noisy_signal[i_model, i, :]))
-        original_noise = noisy_signal[i_model, i, :] - clean_signal[i_model, i, :]
         _, spect_noisy_signal = waveform_fft(noisy_signal[i_model, i, :]/scaling_factor, dt)
         _, spect_clean_signal = waveform_fft(clean_signal[i_model, i, :]/scaling_factor, dt)
         _, spect_noise = waveform_fft(separated_noise[i_model, i, :] / scaling_factor, dt)
-        _, spect_original_noise = waveform_fft(original_noise / scaling_factor, dt)
+        _, spect_true_noise = waveform_fft(true_noise[i_model, i, :] / scaling_factor, dt)
         freq, spect_denoised_signal = waveform_fft(denoised_signal[i_model, i, :]/scaling_factor, dt)
         ax[0, i].loglog(freq, spect_noisy_signal, '-k', label='raw signal', linewidth=0.5, alpha=1)
         ax[0, i].loglog(freq, spect_clean_signal, '-r', label='true earthquake', linewidth=0.5, alpha=1)
         ax[0, i].loglog(freq, spect_denoised_signal, '-b', label='separated earthquake', linewidth=0.5, alpha=1)
         ax[1, i].loglog(freq, spect_noise, '-', color='b', label='noise', linewidth=0.5, alpha=0.8)
-        ax[1, i].loglog(freq, spect_original_noise, 'r', label='orginal noise', linewidth=0.5, alpha=1)
+        ax[1, i].loglog(freq, spect_true_noise, 'r', label='orginal noise', linewidth=0.5, alpha=1)
         ax[1, i].set_xlabel('Frequency (Hz)', fontsize=14)
         ax[0, i].set_title(comps[i], fontsize=16)
         ax[1, i].grid(alpha=0.2)
         ax[0, i].grid(alpha=0.2)
 
     ax[0, 0].set_ylabel('velocity spectra', fontsize=14)
-#    ax[1, 0].set_ylabel('velocity spectra', fontsize=14)
+    ax[1, 0].set_ylabel('velocity spectra', fontsize=14)
     plt.figure(1)
     plt.savefig(model_dir + f'/figures/{model_name}_spectrum_{i_model}.pdf', bbox_inches='tight')

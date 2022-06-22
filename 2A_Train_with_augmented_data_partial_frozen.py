@@ -15,12 +15,12 @@ from numpy.random import default_rng
 from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
-from torch_tools import WaveformDataset, try_gpu, CCMSELoss
+from torch_tools import WaveformDataset, try_gpu, CCMSELoss, MSELossOnly
 from torch_tools import training_loop_branches_augmentation
 from autoencoder_1D_models_torch import T_model, W_model
 
 # %%
-weighted_loss = True
+weighted_loss = False
 gpu_num = 0
 npts = 3000
 devc = try_gpu(i=gpu_num)
@@ -29,17 +29,23 @@ model_dir = 'Freeze_Middle_augmentation'
 model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
-wave_mat = './POHA_and_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
+datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
+wave_mat = datadir + 'STEAD_POHA_and_Ponly_2004_18_alldepth_snr_25_sample10Hz_lowpass2Hz.hdf5'
 mkdir(model_dir)
 # %% Read the pre-processed datasets
 print("#" * 12 + " Loading data " + "#" * 12)
-X_train = loadmat(wave_mat)["quake_waves"]
-Y_train = loadmat(wave_mat)["noise_waves"]
+# X_train = loadmat(wave_mat)["quake_waves"]
+# Y_train = loadmat(wave_mat)["noise_waves"]
+with h5py.File(wave_mat, 'r') as f:
+    X_train = f['quake_waves'][:]
+    Y_train = f['noise_waves'][:]
 
 train_size = 0.6  # 60% for training
 test_size = 0.5  # (1-80%) x 50% for testing
-rand_seed1 = 13
-rand_seed2 = 20
+# rand_seed1 = 13
+# rand_seed2 = 20
+rand_seed1 = 43
+rand_seed2 = 11
 X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
 X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=test_size, random_state=rand_seed2)
 # %% Convert to torch class. Or WaveformDataset_h5 for limited memory
@@ -74,7 +80,8 @@ print(f'Number of parameters to be trained: {n_para}\n')
 # %% Hyper-parameters for training
 batch_size, epochs, lr = 128, 200, 1e-3
 minimum_epochs, patience = 30, 20  # patience for early stopping
-loss_fn = CCMSELoss(use_weight=weighted_loss)
+# loss_fn = CCMSELoss(use_weight=weighted_loss)
+loss_fn = MSELossOnly(use_weight=weighted_loss)
 optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 train_iter = DataLoader(training_data, batch_size=batch_size, shuffle=False)
 validate_iter = DataLoader(validate_data, batch_size=batch_size, shuffle=False)

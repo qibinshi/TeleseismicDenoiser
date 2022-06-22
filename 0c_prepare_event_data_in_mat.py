@@ -1,11 +1,12 @@
 """
 Use high signal-to-noise ratio teleseismic data
-to compose clean earthquake wiggles in MAT format
+to compose clean earthquake wiggles in HDF5 format
 
 @author: Qibin Shi (qibins@uw.edu)
 """
 import glob
 import time
+import h5py
 import numpy as np
 from distaz import DistAz
 from scipy.io import savemat
@@ -17,7 +18,8 @@ from obspy import UTCDateTime, read_events
 npts = 6000
 idx_trace = 0
 idx_event = 0
-workdir = 'event_data/M6/'
+workdir = '/mnt/DATA0/qibin_data/event_data/M6/'
+datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
 model = TauPyModel(model="iasp91")
 pre_filt = (0.004, 0.005, 10.0, 12.0)
 allwv = np.zeros((0, npts, 3), dtype=np.double)
@@ -74,5 +76,8 @@ for ev in cat:
     elapseT = time.time() - since
     idx_event = idx_event + 1
     print(evnm, "--------", idx_event, "events", idx_trace, "traces processed.", "Time elapsed: %.2f s" % elapseT)
-savemat("wave_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat", {"allwv": allwv})
+# savemat(workdir + 'wave_Ponly_2000_21_over100km_snr_25_sample10Hz_lowpass2Hz.mat', {"allwv": allwv})
+with h5py.File(datadir + 'wave_Ponly_2004_18_alldepth_snr_25_sample10Hz_lowpass2Hz.hdf5', 'w') as f:
+    f.create_dataset("allwv", data=allwv)
+
 print("Total traces of data:", len(allwv))

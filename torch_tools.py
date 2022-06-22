@@ -539,3 +539,20 @@ class CCMSELoss(torch.nn.Module):
             ccmseloss = torch.nanmean(mse) + 1 - torch.nanmean(cc)
 
         return ccmseloss
+
+class MSELossOnly(torch.nn.Module):
+    def __init__(self, use_weight=False):
+        super().__init__()
+        self.use_weight = use_weight
+
+    def forward(self, x, y, weight=1):
+
+        mse = torch.mean(torch.square(x - y), dim=2)
+
+        if self.use_weight:
+            mse = torch.nanmean(mse, dim=1)
+            mseloss = torch.nanmean(mse/weight)
+        else:
+            mseloss = torch.nanmean(mse)
+
+        return mseloss

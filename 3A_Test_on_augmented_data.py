@@ -25,15 +25,19 @@ npts = 3000
 batch_size = 128
 gpu_num = 1
 devc = try_gpu(i=gpu_num)
-wave_mat = './POHA_and_Ponly_2004_18_shallow_snr_25_sample10Hz_lowpass2Hz.mat'
+datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
+wave_mat = datadir + 'STEAD_POHA_and_Ponly_2004_18_alldepth_snr_25_sample10Hz_lowpass2Hz.hdf5'
 model_name = "Branch_Encoder_Decoder_LSTM"
 model_dir = 'Freeze_Middle_augmentation'
 comps = ['E', 'N', 'Z']
 mkdir(model_dir + '/figures')
 
 # %% Read mat data
-X_train = loadmat(wave_mat)["quake_waves"]
-Y_train = loadmat(wave_mat)["noise_waves"]
+# X_train = loadmat(wave_mat)["quake_waves"]
+# Y_train = loadmat(wave_mat)["noise_waves"]
+with h5py.File(wave_mat, 'r') as f:
+    X_train = f['quake_waves'][:]
+    Y_train = f['noise_waves'][:]
 
 with h5py.File(model_dir + f'/{model_name}_Dataset_split.hdf5', 'r') as f:
     train_size = f.attrs['train_size']

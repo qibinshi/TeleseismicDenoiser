@@ -10,14 +10,16 @@ import random
 import numpy as np
 from scipy.io import loadmat
 from matplotlib import pyplot as plt
+from numpy.random import default_rng
 from torch.utils.data import DataLoader
 from utilities import mkdir, write_progress
 from sklearn.model_selection import train_test_split
 from torch_tools import WaveformDataset, try_gpu, training_loop_branches, CCMSELoss
-from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv, T_model
+from autoencoder_1D_models_torch import InputLinear, InputConv, OutputLinear, OutputDconv, T_model, W_model
 
 # %%
 gpu_num = 0
+npts = 3000
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
 model_dir = 'Freeze_Middle'
@@ -53,24 +55,24 @@ print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
 
-Linear_pre0 = InputLinear(750, 600)
-Linear_pre1 = InputLinear(2400, 1200)
-Linear_pre2 = InputLinear(1200, 600)
-Conv0 = InputConv(3, 3, 9, 4, 4)
-Conv1 = InputConv(3, 8, 45, 1, 'same')
-Conv2 = InputConv(8, 8, 21, 2, 10)
-Conv3 = InputConv(8, 8, 21, 2, 10)
-Conv4 = InputConv(8, 8, 21, 2, 10)
-Conv5 = InputConv(8, 3, 9, 1, 'same')
-Dconv5 = OutputDconv(3, 8, 9, 1, 4, 0)
-Dconv4 = OutputDconv(8, 8, 21, 2, 10, 1)
-Dconv3 = OutputDconv(8, 8, 21, 2, 10, 1)
-Dconv2 = OutputDconv(8, 8, 21, 2, 10, 1)
-Dconv1 = OutputDconv(8, 3, 45, 1, 22, 0)
-Dconv0 = OutputDconv(3, 3, 9, 4, 3, 1)
-Linear_post2 = OutputLinear(600, 1200)
-Linear_post1 = OutputLinear(1200, 2400)
-Linear_post0 = OutputLinear(600, 750)
+# Linear_pre0 = InputLinear(750, 600)
+# Linear_pre1 = InputLinear(2400, 1200)
+# Linear_pre2 = InputLinear(1200, 600)
+# Conv0 = InputConv(3, 3, 9, 4, 4)
+# Conv1 = InputConv(3, 8, 45, 1, 'same')
+# Conv2 = InputConv(8, 8, 21, 2, 10)
+# Conv3 = InputConv(8, 8, 21, 2, 10)
+# Conv4 = InputConv(8, 8, 21, 2, 10)
+# Conv5 = InputConv(8, 3, 9, 1, 'same')
+# Dconv5 = OutputDconv(3, 8, 9, 1, 4, 0)
+# Dconv4 = OutputDconv(8, 8, 21, 2, 10, 1)
+# Dconv3 = OutputDconv(8, 8, 21, 2, 10, 1)
+# Dconv2 = OutputDconv(8, 8, 21, 2, 10, 1)
+# Dconv1 = OutputDconv(8, 3, 45, 1, 22, 0)
+# Dconv0 = OutputDconv(3, 3, 9, 4, 3, 1)
+# Linear_post2 = OutputLinear(600, 1200)
+# Linear_post1 = OutputLinear(1200, 2400)
+# Linear_post0 = OutputLinear(600, 750)
 
 for param in model.parameters():
     param.requires_grad = False
@@ -78,6 +80,7 @@ for param in model.parameters():
 # model = torch.nn.Sequential(Conv1, Conv2, Conv3, Conv4, Conv5, Linear_pre0, model,
 #                             Linear_post0, Dconv5, Dconv4, Dconv3, Dconv2, Dconv1).to(devc)
 model = T_model(model).to(devc)
+#model = W_model(model).to(devc)
 
 n_para = 0
 for idx, param in enumerate(model.parameters()):
@@ -88,7 +91,7 @@ for idx, param in enumerate(model.parameters()):
 print(f'Number of parameters to be trained: {n_para}\n')
 
 # %% Hyper-parameters for training
-batch_size, epochs, lr = 64, 200, 1e-4
+batch_size, epochs, lr = 256, 200, 1e-3
 minimum_epochs, patience = 30, 15  # patience for early stopping
 #loss_fn = torch.nn.MSELoss()
 loss_fn = CCMSELoss()
@@ -104,7 +107,8 @@ model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches
                                                                                  model, loss_fn, optimizer,
                                                                                  epochs=epochs, patience=patience,
                                                                                  device=devc,
-                                                                                 minimum_epochs=minimum_epochs)
+                                                                                 minimum_epochs=minimum_epochs,
+                                                                                 npts=npts)
 print("Training is done!")
 write_progress(progress_file, text_contents="Training is done!" + '\n')
 
@@ -134,7 +138,16 @@ with h5py.File(model_dir + f'/{model_name}_Dataset_split.hdf5', 'w') as f:
 # Calculate the test loss
 test_loss = 0.0
 model.eval()
-for X, y in test_iter:
+for X0, y0 in test_iter:
+    rng = default_rng(11)
+    nbatch = X0.size(0)
+    X = torch.zeros(nbatch, X0.size(1), 3000, dtype=torch.float64)
+    y = torch.zeros(nbatch, y0.size(1), 3000, dtype=torch.float64)
+    start_pt = rng.choice(3000, nbatch)
+    for i in np.arange(nbatch):
+        X[i] = X0[i, :, start_pt[i]:start_pt[i] + 3000]
+        y[i] = y0[i, :, start_pt[i]:start_pt[i] + 3000]
+
     X, y = X.to(devc), y.to(devc)
     if len(y.data) != batch_size:
         break

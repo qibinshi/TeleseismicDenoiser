@@ -15,23 +15,31 @@ conda install scipy
 conda install obspy -c conda-forge
 conda install scikit-learn
 ```
-## To prepare your own dataset for training, run the scripts. 
-#### 0a_buildcatalog.py
-- Customize the global earthquake catalog for teleseismic data.   
-#### 0b_downloadcatalog.py
-- Download all the teleseismic data available from FDSN client.
-#### 0c_prepare_event_data_in_mat.py
-- Process the earthquake waveform and select high signal-to-noise ratio data for training.
-#### 1A_save_with_noise.py
-- Prepare noise waveform at global stations.
+## Prepare training dataset once the even-based files are ready.
+#### 0B_event_plus_prenoise_mpi.py
+- Process the event-based waveform and save both P/S wave and pre-P wave signals.
+#### 1B_add_STEAD_noise.py
+- Add STEAD and POHA noises to the same earthquake waveforms in previous step to form another 50% of training data.
 
-## Train the neural net and test the model using the following scripts, with data augmentation.
-#### 2A_Train_with_augmented_data_partial_frozen.py
+## Train and test the model, with data augmented by squeezing and shifting P/S waves and stacking noises with variable SNR.
+#### 2B_Train_with_augmented_P_preP_partial_frozen.py
 - Training with stacked noisy earthquake waveform in order to obtain the denoised earthquake waveform and pure noise. Data is being augmented on the fly.
-#### 3A_Test_on_augmented_data.py
+#### 3B_Test_on_augmented_P_preP.py
 - Evaluate the performance of the global earthquake denoiser on the testing data.
+
+### * If only STEAD and POHA noises are used (no pre-P noise) and no squeezing is done, training loss can decay easier. Using the following scripts instead
+#### 0A_prepare_event_data_in_mat.py
+#### 1A_save_with_noise.py
+#### 2A_Train_with_augmented_data_partial_frozen.py
+#### 3A_Test_on_augmented_data.py
 
 ### * In the case of sufficient training data or fine-tuning the model, data augmentation can be off by using the following scripts.
 #### 1_stack_with_noise.py
 #### 2_Train_Adaptors_Freeze_WDN.py
 #### 3_test_model_on_teleseismic_wave.py
+
+## Apply the model to real noisy data
+#### 4_new_class_data_for_application.py
+- Prepare real noisy data for application
+#### 5_apply_noisy_data.py
+- Denoise the noisy data and plot the separated earthquake signal and noises in both time and spectrum domain.

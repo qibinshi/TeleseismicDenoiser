@@ -9,7 +9,6 @@ import h5py
 import torch
 import random
 import numpy as np
-from scipy.io import loadmat
 from matplotlib import pyplot as plt
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
@@ -21,8 +20,9 @@ from autoencoder_1D_models_torch import T_model, W_model
 
 # %%
 weighted_loss = False
-gpu_num = 0
+pttp = 10000
 npts = 3000
+gpu_num = 0
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
 model_dir = 'Freeze_Middle_augmentation'
@@ -30,15 +30,32 @@ model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-wave_mat = datadir + 'Alldepths_snr25_2004_18_sample10_lpass2_P_POHA_STEAD.hdf5'
+wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP1.hdf5'
+wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP1.hdf5'
 mkdir(model_dir)
+
 # %% Read the pre-processed datasets
-print("#" * 12 + " Loading data " + "#" * 12)
-# X_train = loadmat(wave_mat)["quake_waves"]
-# Y_train = loadmat(wave_mat)["noise_waves"]
-with h5py.File(wave_mat, 'r') as f:
-    X_train = f['quake_waves'][:]
-    Y_train = f['noise_waves'][:]
+print("#" * 12 + " Loading P wave and pre-P noises " + "#" * 12)
+
+with h5py.File(wave_preP, 'r') as f:
+    X_train = f['pwave'][:]
+    Y_train = f['noise'][:, (0 - npts):, :]
+
+X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
+Y_train = (Y_train - np.mean(Y_train, axis=1, keepdims=True)) / (np.std(Y_train, axis=1, keepdims=True) + 1e-12)
+
+X_sum = np.sum(np.square(X_train), axis=1)
+indX = np.where(X_sum == 0)[0]
+
+X_train = np.delete(X_train, indX, 0)
+Y_train = np.delete(Y_train, indX, 0)
+
+print("#" * 12 + " Loading P wave and STEAD noises " + "#" * 12)
+with h5py.File(wave_stead, 'r') as f:
+    X_stead = f['pwave'][:]
+    Y_stead = f['noise'][:, (0 - npts):, :]
+X_train = np.append(X_train, X_stead, axis=0)
+Y_train = np.append(Y_train, Y_stead, axis=0)
 
 train_size = 0.6  # 60% for training
 test_size = 0.5  # (1-80%) x 50% for testing
@@ -95,7 +112,7 @@ model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches
                                                                                  epochs=epochs, patience=patience,
                                                                                  device=devc,
                                                                                  minimum_epochs=minimum_epochs,
-                                                                                 npts=npts)
+                                                                                 npts=npts, pttp=pttp)
 print("Training is done!")
 write_progress(progress_file, text_contents="Training is done!" + '\n')
 
@@ -127,32 +144,43 @@ test_loss = 0.0
 model.eval()
 for X0, y0 in test_iter:
     nbatch = X0.size(0)
-    stack = torch.zeros(X0.size(), dtype=torch.float64)
-    quake = torch.zeros(X0.size(), dtype=torch.float64)
-    X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
-    y = torch.zeros(nbatch, y0.size(1), npts, dtype=torch.float64)
+    std_wgt = torch.ones(nbatch, dtype=torch.float64)
+    quak2 = torch.zeros(nbatch, y0.size(1), npts * 2, dtype=torch.float64)
+    quake = torch.zeros(y0.size(), dtype=torch.float64)
+    stack = torch.zeros(y0.size(), dtype=torch.float64)
+
     rng = default_rng(17)
     rng_snr = default_rng(23)
-    start_pt = rng.choice(y0.size(2) - npts, nbatch)
+    rng_sqz = default_rng(11)
+    start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
     snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+    sqz = rng_sqz.choice(2, nbatch) + 1
+    pt1 = pttp - sqz * npts
+    pt2 = pttp + sqz * npts
 
     for i in np.arange(nbatch):
-        quake[i] = X0[i] * snr[i]
+        # %% squeeze earthquake signal
+        quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
+        # %% shift earthquake signal
+        quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+        # %% stack signal and noise
         stack[i] = quake[i] + y0[i]
+        # %% normalize
         scale_mean = torch.mean(stack[i], dim=1)
         scale_std = torch.std(stack[i], dim=1) + 1e-12
-        X[i] = stack[i, :, start_pt[i]:start_pt[i] + npts]
-        y[i] = quake[i, :, start_pt[i]:start_pt[i] + npts]
+        std_wgt[i] = torch.nanmean(scale_std)
         for j in np.arange(X0.size(1)):
-            X[i, j] = torch.div(torch.sub(X[i, j], scale_mean[j]), scale_std[j])
-            y[i, j] = torch.div(torch.sub(y[i, j], scale_mean[j]), scale_std[j])
+            stack[i, j] = torch.div(torch.sub(stack[i, j], scale_mean[j]), scale_std[j])
+            quake[i, j] = torch.div(torch.sub(quake[i, j], scale_mean[j]), scale_std[j])
 
-    X, y = X.to(devc), y.to(devc)
+    X, y = stack.to(devc), quake.to(devc)
     snr = torch.from_numpy(snr).to(devc)
+    std_wgt = std_wgt.to(devc)
+
     if len(y.data) != batch_size:
         break
     output1, output2 = model(X)
-    loss_pred = loss_fn(output1, y, snr) + loss_fn(output2, X - y) + loss_fn(output1 + output2, X, snr+1)
+    loss_pred = loss_fn(output1, y, snr**2) + loss_fn(output2, X - y) + loss_fn(output1 + output2, X, std_wgt**2)
     test_loss += loss_pred.item() * X.size(0)
 
 test_loss = test_loss/len(test_iter.dataset)

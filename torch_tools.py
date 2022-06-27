@@ -324,7 +324,7 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
 ### Qibin: force model.eval not to calculate gradient
 ### Qibin: data augmemtation on the fly
 def training_loop_branches_augmentation(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs
-                           , patience, device, minimum_epochs=None, npts=3000):
+                           , patience, device, minimum_epochs=None, npts=3000, pttp=10000):
 
     # to track the average training loss per epoch as the model trains
     avg_train_losses = []
@@ -361,28 +361,34 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
             # stack and shift
             nbatch = X0.size(0)
             std_wgt = torch.ones(nbatch, dtype=torch.float64)
-            stack = torch.zeros(X0.size(), dtype=torch.float64)
-            quake = torch.zeros(X0.size(), dtype=torch.float64)
-            X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
-            y = torch.zeros(nbatch, y0.size(1), npts, dtype=torch.float64)
+            quak2 = torch.zeros(nbatch, y0.size(1), npts * 2, dtype=torch.float64)
+            quake = torch.zeros(y0.size(), dtype=torch.float64)
+            stack = torch.zeros(y0.size(), dtype=torch.float64)
             rng = default_rng(batch * epoch)
             rng_snr = default_rng(batch * epoch + 1)
-            start_pt = rng.choice(y0.size(2) - npts, nbatch)
+            rng_sqz = default_rng(batch * epoch + 2)
+            start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
             snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+            sqz = rng_sqz.choice(2, nbatch) + 1
+            pt1 = pttp - sqz * npts
+            pt2 = pttp + sqz * npts
 
             for i in np.arange(nbatch):
-                quake[i] = X0[i] * snr[i]
+                # %% squeeze earthquake signal
+                quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
+                # %% shift earthquake signal
+                quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+                # %% stack signal and noise
                 stack[i] = quake[i] + y0[i]
+                # %% normalize
                 scale_mean = torch.mean(stack[i], dim=1)
                 scale_std = torch.std(stack[i], dim=1) + 1e-12
                 std_wgt[i] = torch.nanmean(scale_std)
-                X[i] = stack[i, :, start_pt[i]:start_pt[i] + npts]
-                y[i] = quake[i, :, start_pt[i]:start_pt[i] + npts]
                 for j in np.arange(X0.size(1)):
-                    X[i, j] = torch.div(torch.sub(X[i, j], scale_mean[j]), scale_std[j])
-                    y[i, j] = torch.div(torch.sub(y[i, j], scale_mean[j]), scale_std[j])
+                    stack[i, j] = torch.div(torch.sub(stack[i, j], scale_mean[j]), scale_std[j])
+                    quake[i, j] = torch.div(torch.sub(quake[i, j], scale_mean[j]), scale_std[j])
 
-            X, y = X.to(device), y.to(device)
+            X, y = stack.to(device), quake.to(device)
             snr = torch.from_numpy(snr).to(device)
             std_wgt = std_wgt.to(device)
 
@@ -412,28 +418,34 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
                 # stack and shift
                 nbatch = X0.size(0)
                 std_wgt = torch.ones(nbatch, dtype=torch.float64)
-                stack = torch.zeros(X0.size(), dtype=torch.float64)
-                quake = torch.zeros(X0.size(), dtype=torch.float64)
-                X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
-                y = torch.zeros(nbatch, y0.size(1), npts, dtype=torch.float64)
+                quak2 = torch.zeros(nbatch, y0.size(1), npts * 2, dtype=torch.float64)
+                quake = torch.zeros(y0.size(), dtype=torch.float64)
+                stack = torch.zeros(y0.size(), dtype=torch.float64)
                 rng = default_rng(batch * epoch)
                 rng_snr = default_rng(batch * epoch + 1)
-                start_pt = rng.choice(y0.size(2) - npts, nbatch)
+                rng_sqz = default_rng(batch * epoch + 2)
+                start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
                 snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+                sqz = rng_sqz.choice(2, nbatch) + 1
+                pt1 = pttp - sqz * npts
+                pt2 = pttp + sqz * npts
 
                 for i in np.arange(nbatch):
-                    quake[i] = X0[i] * snr[i]
+                    # %% squeeze earthquake signal
+                    quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
+                    # %% shift earthquake signal
+                    quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+                    # %% stack signal and noise
                     stack[i] = quake[i] + y0[i]
+                    # %% normalize
                     scale_mean = torch.mean(stack[i], dim=1)
                     scale_std = torch.std(stack[i], dim=1) + 1e-12
                     std_wgt[i] = torch.nanmean(scale_std)
-                    X[i] = stack[i, :, start_pt[i]:start_pt[i] + npts]
-                    y[i] = quake[i, :, start_pt[i]:start_pt[i] + npts]
                     for j in np.arange(X0.size(1)):
-                        X[i, j] = torch.div(torch.sub(X[i, j], scale_mean[j]), scale_std[j])
-                        y[i, j] = torch.div(torch.sub(y[i, j], scale_mean[j]), scale_std[j])
+                        stack[i, j] = torch.div(torch.sub(stack[i, j], scale_mean[j]), scale_std[j])
+                        quake[i, j] = torch.div(torch.sub(quake[i, j], scale_mean[j]), scale_std[j])
 
-                X, y = X.to(device), y.to(device)
+                X, y = stack.to(device), quake.to(device)
                 snr = torch.from_numpy(snr).to(device)
                 std_wgt = std_wgt.to(device)
 

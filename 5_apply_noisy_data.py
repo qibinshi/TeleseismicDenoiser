@@ -10,12 +10,11 @@ import h5py
 import torch
 import matplotlib
 import numpy as np
-from utilities import mkdir
 from functools import partial
 from multiprocessing import Pool
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
-from source_util import plot_application
+from denoiser_util import plot_application, mkdir
 from torch_tools import WaveformDataset, try_gpu
 
 matplotlib.rcParams.update({'font.size': 12})

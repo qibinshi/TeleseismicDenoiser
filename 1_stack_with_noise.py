@@ -5,10 +5,10 @@ Stack clean earthquake signal with POHA noise
 """
 import obspy
 import numpy as np
-from source_util import trim_align
 from numpy.random import default_rng
 from scipy.io import savemat, loadmat
-from utilities import randomization_noise
+from denoiser_util import trim_align, randomization_noise
+
 
 # %%
 in_pts = 6000

@@ -7,9 +7,10 @@ import h5py
 import obspy
 import numpy as np
 import pandas as pd
-from source_util import trim_align
 from numpy.random import default_rng
-from utilities import randomization_noise, downsample_series
+from denoiser_util import randomization_noise
+from denoiser_util import trim_align, downsample_series
+
 
 # %%
 in_pts = 3000

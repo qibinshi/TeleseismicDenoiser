@@ -11,7 +11,7 @@ from scipy.io import loadmat
 from matplotlib import pyplot as plt
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
-from utilities import waveform_fft, mkdir
+from denoiser_util import waveform_fft, mkdir
 from torch_tools import WaveformDataset, try_gpu
 from sklearn.metrics import explained_variance_score
 from sklearn.model_selection import train_test_split

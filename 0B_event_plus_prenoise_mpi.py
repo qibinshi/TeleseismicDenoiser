@@ -8,10 +8,10 @@ import os
 import time
 import h5py
 import numpy as np
-from multiprocessing import Pool
 from obspy import read_events
-from source_util import process_single_event
 from functools import partial
+from multiprocessing import Pool
+from denoiser_util import process_single_event
 
 # %% 3000 seconds with 10Hz sampling
 npts = 30000

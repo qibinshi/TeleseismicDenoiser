@@ -11,7 +11,7 @@ import numpy as np
 from functools import partial
 from multiprocessing import Pool
 from obspy import UTCDateTime, read_events
-from source_util import process_single_event_only
+from denoiser_util import process_single_event_only
 
 # %%
 halftime = 300.0

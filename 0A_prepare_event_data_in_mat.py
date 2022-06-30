@@ -9,7 +9,6 @@ import time
 import h5py
 import numpy as np
 from distaz import DistAz
-from scipy.io import savemat
 from obspy.taup import TauPyModel
 from obspy import read_inventory, read
 from obspy import UTCDateTime, read_events
@@ -76,7 +75,7 @@ for ev in cat:
     elapseT = time.time() - since
     idx_event = idx_event + 1
     print(evnm, "--------", idx_event, "events", idx_trace, "traces processed.", "Time elapsed: %.2f s" % elapseT)
-# savemat(workdir + 'wave_Ponly_2000_21_over100km_snr_25_sample10Hz_lowpass2Hz.mat', {"allwv": allwv})
+
 with h5py.File(datadir + 'wave_Ponly_2004_18_alldepth_snr_25_sample10Hz_lowpass2Hz.hdf5', 'w') as f:
     f.create_dataset("allwv", data=allwv)
 

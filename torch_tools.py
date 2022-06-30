@@ -377,7 +377,10 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
                 # %% squeeze earthquake signal
                 quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
                 # %% shift earthquake signal
-                quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+                tmp = quak2[i, :, start_pt[i]:start_pt[i] + npts]
+                for j in np.arange(X0.size(1)):
+                    quake[i, j] = torch.div(torch.sub(tmp[j], torch.mean(tmp[j], dim=-1)),
+                                            torch.std(tmp[j], dim=-1) + 1e-12) * snr[i]
                 # %% stack signal and noise
                 stack[i] = quake[i] + y0[i]
                 # %% normalize
@@ -434,7 +437,10 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
                     # %% squeeze earthquake signal
                     quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
                     # %% shift earthquake signal
-                    quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+                    tmp = quak2[i, :, start_pt[i]:start_pt[i] + npts]
+                    for j in np.arange(X0.size(1)):
+                        quake[i, j] = torch.div(torch.sub(tmp[j], torch.mean(tmp[j], dim=-1)),
+                                                torch.std(tmp[j], dim=-1) + 1e-12) * snr[i]
                     # %% stack signal and noise
                     stack[i] = quake[i] + y0[i]
                     # %% normalize

@@ -4,80 +4,46 @@ e.g. deep M5 earthquakes recorded on ocean stations
 
 @author: Qibin Shi (qibins@uw.edu)
 """
-import glob
+import os
 import time
 import h5py
 import numpy as np
-from distaz import DistAz
-from obspy.taup import TauPyModel
-from obspy import read_inventory, read
+from functools import partial
+from multiprocessing import Pool
 from obspy import UTCDateTime, read_events
+from source_util import process_single_event_only
 
 # %%
-npts = 6000
-idx_trace = 0
-idx_event = 0
-workdir = '/mnt/DATA0/qibin_data/event_data/M6_depthover100/'
+halftime = 300.0
+samplerate = 10
+freq = 2.0
+npts = int(halftime*2*samplerate)
+allpwave = np.zeros((0, npts, 3), dtype=np.double)
+
+workdir = '/mnt/DATA0/qibin_data/event_data/window_startOrg/M5.5_2000-2021_depthover500/'
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-model = TauPyModel(model="iasp91")
-pre_filt = (0.004, 0.005, 10.0, 12.0)
-allwv = np.zeros((0, npts, 3), dtype=np.double)
-onewv = np.zeros((1, npts, 3), dtype=np.double)
+since = time.time()
+
 cat = read_events(workdir + "*.xml")
 print(len(cat), "events in total")
 
-since = time.time()
-## %% Loop over catalog for events deeper than 500km
-for ev in cat:
-    evdp = ev.origins[0].depth / 1000.0
-    if evdp > 500:
-        evnm = str(ev.resource_id)[13:]
-        evlo = ev.origins[0].longitude
-        evla = ev.origins[0].latitude
-        org_t = ev.origins[0].time
+partial_func = partial(process_single_event_only, diretory=workdir, halftime=halftime)
+num_proc = os.cpu_count()
+pool = Pool(processes=num_proc)
+print("Total number of processes: ", num_proc)
 
-        # %% Loop over stations
-        for sta in glob.glob(workdir + evnm + 'stas/*xml'):
-            inv = read_inventory(sta)
-            stco = inv[0].code + "." + inv[0][0].code + "." + inv[0][0][0].location_code
-            stlo = inv[0][0].longitude
-            stla = inv[0][0].latitude
-            result = DistAz(stla, stlo, evla, evlo)
-            distdeg = result.getDelta()
-            backazi = result.getBaz()
+result = pool.map(partial_func, cat)
 
-            try:
-                st0 = read(workdir + evnm + "waves/" + stco + ".BH?_*")
-                st = st0.copy()
-            except:
-                continue
-            #        try:
-            #            st.remove_response(inventory=inv, output='VEL', pre_filt=pre_filt)
-            #        except:
-            #            continue
-            st.filter("lowpass", freq=2.0)
-            st.resample(10)
-            st.merge(fill_value=np.nan)
-            arrivals = model.get_travel_times(source_depth_in_km=evdp, distance_in_degree=distdeg, phase_list=['P'])
-            tp = UTCDateTime(org_t + arrivals[0].time)
-            st.trim(tp - 300.0, tp + 300.0)
+elapseT = time.time() - since
+print("All processed. Time elapsed: %.2f s" % elapseT)
 
-            if len(st) == 3 and len(st[0].data) >= npts and len(st[1].data) >= npts and len(st[2].data) >= npts:
-                noise_amp = np.std(np.array(st[0].data)[0:2950])
-                pwave_amp = np.std(np.array(st[0].data)[3000:npts-1])
+for i in range(len(cat)):
+    allpwave = np.append(allpwave, result[i], axis=0)
+    print(i, 'th quake added')
 
-                if pwave_amp < (noise_amp * 1):
-                    # st.rotate(method="NE->RT", back_azimuth=backazi)
-                    for i in range(3):
-                        onewv[0, :, i] = np.array(st[i].data)[0:npts]
-                    allwv = np.append(allwv, onewv, axis=0)
-                    idx_trace = idx_trace + 1
+elapseT = time.time() - since
+print("Added together multiprocessors. Time elapsed: %.2f s" % elapseT)
+with h5py.File(datadir + 'M5_deep500km_SNRmax3_2000_21_sample10_lpass2_P_mpi.hdf5', 'w') as f:
+    f.create_dataset("pwave", data=allpwave)
 
-        elapseT = time.time() - since
-        idx_event = idx_event + 1
-        print(evnm, "--------", idx_event, "events", idx_trace, "traces processed.", "Time elapsed: %.2f s" % elapseT)
-
-with h5py.File(datadir + 'deep500km_SNRmax1_2000_21_sample10_lpass2_P.hdf5', 'w') as f:
-    f.create_dataset("allwv", data=allwv)
-
-print("Total traces of data:", len(allwv))
+print("Total traces of data:", allpwave.shape[0])

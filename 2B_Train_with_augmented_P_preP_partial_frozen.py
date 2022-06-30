@@ -41,12 +41,8 @@ with h5py.File(wave_preP, 'r') as f:
     X_train = f['pwave'][:]
     Y_train = f['noise'][:, (0 - npts):, :]
 
-X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
-Y_train = (Y_train - np.mean(Y_train, axis=1, keepdims=True)) / (np.std(Y_train, axis=1, keepdims=True) + 1e-12)
-
 X_sum = np.sum(np.square(X_train), axis=1)
 indX = np.where(X_sum == 0)[0]
-
 X_train = np.delete(X_train, indX, 0)
 Y_train = np.delete(Y_train, indX, 0)
 
@@ -56,6 +52,10 @@ with h5py.File(wave_stead, 'r') as f:
     Y_stead = f['noise'][:, (0 - npts):, :]
 X_train = np.append(X_train, X_stead, axis=0)
 Y_train = np.append(Y_train, Y_stead, axis=0)
+
+print("#" * 12 + " Normalizing P wave and noises " + "#" * 12)
+X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
+Y_train = (Y_train - np.mean(Y_train, axis=1, keepdims=True)) / (np.std(Y_train, axis=1, keepdims=True) + 1e-12)
 
 train_size = 0.6  # 60% for training
 test_size = 0.5  # (1-80%) x 50% for testing
@@ -95,7 +95,7 @@ for idx, param in enumerate(model.parameters()):
 print(f'Number of parameters to be trained: {n_para}\n')
 
 # %% Hyper-parameters for training
-batch_size, epochs, lr = 128, 200, 1e-3
+batch_size, epochs, lr = 512, 200, 1e-3
 minimum_epochs, patience = 30, 20  # patience for early stopping
 loss_fn = CCMSELoss(use_weight=weighted_loss)
 # loss_fn = MSELossOnly(use_weight=weighted_loss)
@@ -162,7 +162,10 @@ for X0, y0 in test_iter:
         # %% squeeze earthquake signal
         quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
         # %% shift earthquake signal
-        quake[i] = quak2[i, :, start_pt[i]:start_pt[i] + npts] * snr[i]
+        tmp = quak2[i, :, start_pt[i]:start_pt[i] + npts]
+        for j in np.arange(X0.size(1)):
+            quake[i, j] = torch.div(torch.sub(tmp[j], torch.mean(tmp[j], dim=-1)),
+                                    torch.std(tmp[j], dim=-1) + 1e-12) * snr[i]
         # %% stack signal and noise
         stack[i] = quake[i] + y0[i]
         # %% normalize

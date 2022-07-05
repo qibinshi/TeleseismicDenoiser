@@ -16,19 +16,22 @@ from numpy.random import default_rng
 from torch.utils.data import DataLoader
 from denoiser_util import plot_application, mkdir
 from torch_tools import WaveformDataset, try_gpu
+from scipy.integrate import cumulative_trapezoid
 
 matplotlib.rcParams.update({'font.size': 12})
 
 # %%
 dt = 0.1
 npts = 3000
+npts_trim = 1500
 batch_size = 100
 gpu_num = 1
 devc = try_gpu(i=gpu_num)
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-wave_mat = datadir + 'M5_deep500km_SNRmax3_2000_21_sample10_lpass2_P_mpi.hdf5'
-model_dir = 'Freeze_Middle_augmentation'
-fig_dir = model_dir + '/figures_apply_mpi'
+wave_mat = datadir + 'M5_deep500km_SNRmax3_2000_21_sample10_lpass2_P_mpi_both_BH_HH.hdf5'
+# model_dir = 'Freeze_Middle_augmentation'
+model_dir = 'Release_Middle_augmentation'
+fig_dir = model_dir + '/figures_apply_mpi_releaseWDN'
 mkdir(fig_dir)
 
 # %% Read in the noisy data
@@ -38,11 +41,11 @@ with h5py.File(wave_mat, 'r') as f:
 print("%.0f traces have been read." % len(X_train))
 
 test_data = WaveformDataset(X_train, X_train)
+test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 # %% Model
 print(">_<Loading model ...")
 model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
-test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 model.eval()
 
 print("-_-Processing data ...")
@@ -77,8 +80,25 @@ with torch.no_grad():
     separated_noise = noise_output.cpu().numpy()
     denoised_signal = quake_denoised.cpu().numpy()
 
+    with h5py.File(datadir + 'Output_M5_deep500km_SNRmax3_2000_21_sample10_lpass2_P_mpi_both_BH_HH.hdf5', 'w') as f:
+        f.create_dataset("pwave", data=denoised_signal)
+        f.create_dataset("noise", data=separated_noise)
+
+    # %% integration
+    timex = np.arange(0, npts_trim) * dt
+    startpt = int((npts - npts_trim)/2)
+    endpt = int((npts + npts_trim)/2)
+
+    # noisy_signal = (noisy_signal - np.mean(noisy_signal, axis=-1, keepdims=True)) / (np.std(noisy_signal, axis=-1, keepdims=True) + 1e-12)
+    # separated_noise = (separated_noise - np.mean(separated_noise, axis=-1, keepdims=True)) / (np.std(separated_noise, axis=-1, keepdims=True) + 1e-12)
+    # denoised_signal = (denoised_signal - np.mean(denoised_signal, axis=-1, keepdims=True)) / (np.std(denoised_signal, axis=-1, keepdims=True) + 1e-12)
+
+    noisy_signal = cumulative_trapezoid(noisy_signal[:, :, startpt:endpt], timex, axis=-1, initial=0)
+    separated_noise = cumulative_trapezoid(separated_noise[:, :, startpt:endpt], timex, axis=-1, initial=0)
+    denoised_signal = cumulative_trapezoid(denoised_signal[:, :, startpt:endpt], timex, axis=-1, initial=0)
+
 # %% Parallel Plotting
-partial_func = partial(plot_application, directory=fig_dir, dt=dt, npts=npts)
+partial_func = partial(plot_application, directory=fig_dir, dt=dt, npts=npts_trim)
 num_proc = min(os.cpu_count(), batch_size)
 pool = Pool(processes=num_proc)
 print("Total number of threads for plotting: ", num_proc)

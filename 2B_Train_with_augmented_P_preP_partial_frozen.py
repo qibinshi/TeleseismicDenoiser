@@ -9,6 +9,7 @@ import h5py
 import torch
 import random
 import numpy as np
+import torch.nn as nn
 from matplotlib import pyplot as plt
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
@@ -25,13 +26,13 @@ npts = 3000
 gpu_num = 0
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
-model_dir = 'Freeze_Middle_augmentation'
+model_dir = 'Release_Middle_augmentation'
 model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP1.hdf5'
-wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP1.hdf5'
+wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
+wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP_both_BH_HH.hdf5'
 mkdir(model_dir)
 
 # %% Read the pre-processed datasets
@@ -81,10 +82,15 @@ print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
 
-for param in model.parameters():
-    param.requires_grad = False
+# for param in model.parameters():
+#     param.requires_grad = False
 
-model = T_model(model).to(devc)
+# model = T_model(model).to(devc)
+model = T_model(model)
+if torch.cuda.device_count() >= 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    model = nn.DataParallel(model)
+model.to(devc)
 
 n_para = 0
 for idx, param in enumerate(model.parameters()):

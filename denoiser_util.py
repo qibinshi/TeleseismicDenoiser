@@ -6,6 +6,7 @@ import os
 import glob
 import torch
 import numpy as np
+import pandas as pd
 import scipy.signal as sgn
 import matplotlib.pyplot as plt
 from distaz import DistAz
@@ -37,7 +38,21 @@ def trim_align(trace):
 # Process each event for both signal and noises.
 # This is to prepare big training data.
 def process_single_event(ev, diretory=None, npts=None):
-    model = TauPyModel(model="iasp91")
+    # initialize the metadata
+    meta = pd.DataFrame(columns=[
+        "source_id",
+        "source_origin_time",
+        "source_latitude_deg",
+        "source_longitude_deg",
+        "source_depth_km",
+        "source_magnitude",
+        "station_network_code",
+        "station_code",
+        "station_location_code",
+        "station_latitude_deg",
+        "station_longitude_deg",
+        "trace_snr_db"])
+
     allpwave = np.zeros((0, npts, 3), dtype=np.double)
     allnoise = np.zeros((0, npts, 3), dtype=np.double)
     one_pwave = np.zeros((npts, 3), dtype=np.double)
@@ -49,19 +64,22 @@ def process_single_event(ev, diretory=None, npts=None):
     evla = ev.origins[0].latitude
     evdp = ev.origins[0].depth / 1000.0
     org_t = ev.origins[0].time
+    evmg = ev.magnitudes[0].mag
 
     # %% Loop over stations
     for sta in glob.glob(diretory + evnm + 'stas/*xml'):
         inv = read_inventory(sta)
-        stco = inv[0].code + "." + inv[0][0].code + "." + inv[0][0][0].location_code
-        stlo = inv[0][0].longitude
+        stnw = inv[0].code
+        stco = inv[0][0].code
         stla = inv[0][0].latitude
+        stlo = inv[0][0].longitude
+        stlc = inv[0][0][0].location_code
         result = DistAz(stla, stlo, evla, evlo)
         distdeg = result.getDelta()
         backazi = result.getBaz()
 
         try:
-            st0 = read(diretory + evnm + "waves/" + stco + ".BH?_*")
+            st0 = read(diretory + evnm + "waves/" + stnw + "." + stco + "." + stlc + ".?H?_*")
             st = st0.copy()
         except:
             continue
@@ -72,11 +90,14 @@ def process_single_event(ev, diretory=None, npts=None):
         st.filter("lowpass", freq=2.0)
         st.resample(10)
         st.merge(fill_value=np.nan)
+        model = TauPyModel(model="iasp91")
         arrivals = model.get_travel_times(source_depth_in_km=evdp, distance_in_degree=distdeg, phase_list=['P'])
         tp = UTCDateTime(org_t + arrivals[0].time)
         st.trim(tp - 3600.0, tp + 2000.0)
 
-        if len(st) == 3 and len(st[0].data) >= 56000 and len(st[1].data) >= 56000 and len(st[2].data) >= 56000:
+        if len(st) > 3:
+            print(len(st), "channels", stco)
+        if len(st) >= 3 and len(st[0].data) >= 56000 and len(st[1].data) >= 56000 and len(st[2].data) >= 56000:
             noise_amp = np.std(np.array(st[0].data)[34950:35950])
             pwave_amp = np.std(np.array(st[0].data)[36000:37000])
 
@@ -85,55 +106,89 @@ def process_single_event(ev, diretory=None, npts=None):
                     one_pwave[:, i] = np.array(st[i].data)[26000:56000]
                     pre_noise[:, i] = np.array(st[i].data)[0:36000]
 
-                ## %% extract low amplitudes for noise
+                # %% extract low amplitudes for noise
                 amplitude_series = np.sqrt(np.sum(pre_noise ** 2, axis=1))
                 amplitude_median = np.nanmedian(amplitude_series)
                 noise0 = pre_noise[amplitude_series < (4 * amplitude_median), :]
-                ## %% make sure noise is long enough
+                # %% make sure noise is long enough
                 if noise0.shape[0] > npts / 2:
                     if noise0.shape[0] < npts:
                         noise0 = np.append(noise0, noise0, axis=0)
                     one_noise[:, :] = noise0[:npts, :]
 
-                    ## %% normalize p wave and noise
+                    # %% normalize p wave and noise
                     one_pwave[np.isnan(one_pwave)] = 0
                     one_noise[np.isnan(one_noise)] = 0
                     one_pwave = (one_pwave - np.mean(one_pwave, axis=0)) / (np.std(one_pwave, axis=0) + 1e-12)
                     one_noise = (one_noise - np.mean(one_noise, axis=0)) / (np.std(one_noise, axis=0) + 1e-12)
 
-                    ## %% Save the waveform pairs
+                    # %% Store the waveform pairs
                     allpwave = np.append(allpwave, one_pwave[np.newaxis, :, :], axis=0)
                     allnoise = np.append(allnoise, one_noise[np.newaxis, :, :], axis=0)
 
-    return allpwave, allnoise
+                    # %% Store the metadata of event-station
+                    meta = pd.concat([meta, pd.DataFrame(data={
+                        "source_id": evnm,
+                        "source_origin_time": org_t,
+                        "source_latitude_deg": "%.3f" % evla,
+                        "source_longitude_deg": "%.3f" % evlo,
+                        "source_depth_km": "%.3f" % evdp,
+                        "source_magnitude": evmg,
+                        "station_network_code": stnw,
+                        "station_code": stco,
+                        "station_location_code": stlc,
+                        "station_latitude_deg": stla,
+                        "station_longitude_deg": stlo,
+                        "trace_snr_db": "%.3f" % (pwave_amp / (noise_amp + 1e-12))}, index=[0])], ignore_index=True)
+
+    return allpwave, allnoise, meta
 
 
 # Process each event for only signal.
 # This is to prepare big training data.
 def process_single_event_only(ev, diretory=None, halftime=None, freq=2, rate=10, maxsnr=3):
-    npts = int(rate * halftime * 2)
+    # initialize the metadata
+    meta = pd.DataFrame(columns=[
+        "source_id",
+        "source_origin_time",
+        "source_latitude_deg",
+        "source_longitude_deg",
+        "source_depth_km",
+        "source_magnitude",
+        "station_network_code",
+        "station_code",
+        "station_location_code",
+        "station_latitude_deg",
+        "station_longitude_deg",
+        "trace_snr_db",
+        "distance",
+        "azimuth"])
 
+    npts = int(rate * halftime * 2)
     allpwave = np.zeros((0, npts, 3), dtype=np.double)
     one_pwave = np.zeros((npts, 3), dtype=np.double)
-    model = TauPyModel(model="iasp91")
 
     evnm = str(ev.resource_id)[13:]
     evlo = ev.origins[0].longitude
     evla = ev.origins[0].latitude
     evdp = ev.origins[0].depth / 1000.0
     org_t = ev.origins[0].time
+    evmg = ev.magnitudes[0].mag
 
     # %% Loop over stations
     for sta in glob.glob(diretory + evnm + 'stas/*xml'):
         inv = read_inventory(sta)
-        stco = inv[0].code + "." + inv[0][0].code + "." + inv[0][0][0].location_code
-        stlo = inv[0][0].longitude
+        stnw = inv[0].code
+        stco = inv[0][0].code
         stla = inv[0][0].latitude
+        stlo = inv[0][0].longitude
+        stlc = inv[0][0][0].location_code
         result = DistAz(stla, stlo, evla, evlo)
         distdeg = result.getDelta()
+        azimuth = result.getAz()
 
         try:
-            st0 = read(diretory + evnm + "waves/" + stco + ".BH?_*")
+            st0 = read(diretory + evnm + "waves/" + stnw + "." + stco + "." + stlc + ".?H?_*")
             st = st0.copy()
         except:
             continue
@@ -144,11 +199,14 @@ def process_single_event_only(ev, diretory=None, halftime=None, freq=2, rate=10,
         st.filter("lowpass", freq=freq)
         st.resample(rate)
         st.merge(fill_value=np.nan)
+        model = TauPyModel(model="iasp91")
         arrivals = model.get_travel_times(source_depth_in_km=evdp, distance_in_degree=distdeg, phase_list=['P'])
         tp = UTCDateTime(org_t + arrivals[0].time)
         st.trim(tp - halftime, tp + halftime)
 
-        if len(st) == 3 and len(st[0].data) >= npts and len(st[1].data) >= npts and len(st[2].data) >= npts:
+        if len(st) > 3:
+            print(len(st), "channels", stco)
+        if len(st) >= 3 and len(st[0].data) >= npts and len(st[1].data) >= npts and len(st[2].data) >= npts:
             noise_amp = np.std(np.array(st[0].data)[0:int(rate*(halftime-5))])
             pwave_amp = np.std(np.array(st[0].data)[int(rate*halftime):npts - 1])
 
@@ -159,7 +217,24 @@ def process_single_event_only(ev, diretory=None, halftime=None, freq=2, rate=10,
                 one_pwave = (one_pwave - np.mean(one_pwave, axis=0)) / (np.std(one_pwave, axis=0) + 1e-12)
                 allpwave = np.append(allpwave, one_pwave[np.newaxis, :, :], axis=0)
 
-    return allpwave
+                # %% Store the metadata of event-station
+                meta = pd.concat([meta, pd.DataFrame(data={
+                    "source_id": evnm,
+                    "source_origin_time": org_t,
+                    "source_latitude_deg": "%.3f" % evla,
+                    "source_longitude_deg": "%.3f" % evlo,
+                    "source_depth_km": "%.3f" % evdp,
+                    "source_magnitude": evmg,
+                    "station_network_code": stnw,
+                    "station_code": stco,
+                    "station_location_code": stlc,
+                    "station_latitude_deg": stla,
+                    "station_longitude_deg": stlo,
+                    "trace_snr_db": "%.3f" % (pwave_amp / (noise_amp + 1e-12)),
+                    "distance": distdeg,
+                    "azimuth": azimuth}, index=[0])], ignore_index=True)
+
+    return allpwave, meta
 
 
 def plot_application(noisy_signal, denoised_signal, separated_noise, idx, directory=None, dt=0.1, npts=None):
@@ -198,9 +273,11 @@ def plot_application(noisy_signal, denoised_signal, separated_noise, idx, direct
 
             if i == 2:
                 ax[i, j].xaxis.set_visible(True)
-                ax[i, j].set_xlim(0, npts * dt)
                 ax[i, j].spines['bottom'].set_visible(True)
                 ax[i, j].set_xlabel('time (s)', fontsize=14)
+            if i <= 2:
+                ax[i, j].set_xlim(0, npts * dt)
+                ax[i, j].set_ylim(-1, 1)
 
     ax[0, 0].set_title("Original signal", fontsize=16)
     ax[0, 1].set_title("Denoised P-wave", fontsize=16)

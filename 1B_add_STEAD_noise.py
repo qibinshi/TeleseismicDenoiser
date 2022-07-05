@@ -18,8 +18,8 @@ sample_rate = 10
 maxfreq = 2.0
 
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-cleanwave_mat = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP1.hdf5'
-model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP1.hdf5'
+cleanwave_mat = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
+model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP_both_BH_HH.hdf5'
 
 # %% POHA
 shuffle_phase = False

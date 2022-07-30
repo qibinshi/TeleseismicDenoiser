@@ -1,4 +1,4 @@
-# Global Earthquake Denoiser  
+# Denoising Teleseismic Data (DenoTe) 
 Splitting earthquake and noise waveforms using a two-branch U net trained with global teleseismic data.
 The neural network includes the pretrained [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) for the higher level feature learning.
 

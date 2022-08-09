@@ -367,7 +367,8 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
             rng = default_rng(batch * epoch)
             rng_snr = default_rng(batch * epoch + 1)
             rng_sqz = default_rng(batch * epoch + 2)
-            start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
+            # start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)  # for P-only
+            start_pt = rng.choice(npts - int(npts * 0.25), nbatch) + int(npts * 0.25)  # for S
             snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
             sqz = rng_sqz.choice(2, nbatch) + 1
             pt1 = pttp - sqz * npts
@@ -427,7 +428,8 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
                 rng = default_rng(batch * epoch)
                 rng_snr = default_rng(batch * epoch + 1)
                 rng_sqz = default_rng(batch * epoch + 2)
-                start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
+                # start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)  # for P-only
+                start_pt = rng.choice(npts - int(npts * 0.25), nbatch) + int(npts * 0.25)  # for S
                 snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
                 sqz = rng_sqz.choice(2, nbatch) + 1
                 pt1 = pttp - sqz * npts

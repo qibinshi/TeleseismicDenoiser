@@ -15,7 +15,10 @@ from obspy import UTCDateTime, read_events
 from denoiser_util import process_single_event_only
 
 # %%
-halftime = 300.0
+halftime = 150.0
+phase = 0
+# halftime = 375.0
+# phase = 1
 samplerate = 10
 freq = 2.0
 npts = int(halftime*2*samplerate)
@@ -32,7 +35,15 @@ meta = pd.DataFrame(columns=[
         "station_location_code",
         "station_latitude_deg",
         "station_longitude_deg",
-        "trace_snr_db"])
+        "trace_snr_db",
+        "trace_mean_0",
+        "trace_stdv_0",
+        "trace_mean_1",
+        "trace_stdv_1",
+        "trace_mean_2",
+        "trace_stdv_2",
+        "distance",
+        "azimuth"])
 
 workdir = '/mnt/DATA0/qibin_data/event_data/window_startOrg-3600/M6_2000-2021/'
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
@@ -41,12 +52,11 @@ since = time.time()
 cat = read_events(workdir + "*.xml")
 print(len(cat), "events in total")
 
-partial_func = partial(process_single_event_only, diretory=workdir, halftime=halftime)
+partial_func = partial(process_single_event_only, directory=workdir, halftime=halftime, maxsnr=10, mindep=250, phase=phase)
 num_proc = os.cpu_count()
-pool = Pool(processes=num_proc)
-print("Total number of processes: ", num_proc)
-
-result = pool.map(partial_func, cat)
+with Pool(processes=num_proc) as pool:
+    print("Total number of processes: ", num_proc)
+    result = pool.map(partial_func, cat)
 
 elapseT = time.time() - since
 print("All processed. Time elapsed: %.2f s" % elapseT)
@@ -60,8 +70,8 @@ for i in range(len(cat)):
 
 elapseT = time.time() - since
 print("Added together multiprocessors. Time elapsed: %.2f s" % elapseT)
-with h5py.File(datadir + 'M6_deep200km_SNRmax3_2000_21_sample10_lpass2_P_mpi_both_BH_HH.hdf5', 'w') as f:
+with h5py.File(datadir + 'M6_deep250km_SNRmax10_P_noResp.hdf5', 'w') as f:
     f.create_dataset("pwave", data=allpwave)
 
-meta.to_csv(datadir + "metadata_M6_deep200km_SNRmax3_2000_21_sample10_lpass2_P_mpi_both_BH_HH.csv", sep=',', index=False)
+meta.to_csv(datadir + "metadata_M6_deep250km_SNRmax10_P_noResp.csv", sep=',', index=False)
 print("Total traces of data:", allpwave.shape[0])

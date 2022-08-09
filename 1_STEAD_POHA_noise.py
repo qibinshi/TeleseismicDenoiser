@@ -13,13 +13,14 @@ from denoiser_util import trim_align, downsample_series
 
 
 # %%
-in_pts = 3000
+# in_pts = 3000  # length for P wave training
+in_pts = 7500  # length for P+S wave training
 sample_rate = 10
 maxfreq = 2.0
 
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
 cleanwave_mat = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
-model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP_both_BH_HH.hdf5'
+model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_S_STEAD_MP_both_BH_HH.hdf5'
 
 # %% POHA
 shuffle_phase = False
@@ -91,6 +92,10 @@ print(f'------- {len(stead_noise)} STEAD waveforms has been processed')
 ############## Add together POHA and STEAD noises
 noise_all = np.append(noise_POHA, stead_noise, axis=0)
 noise_all = np.append(noise_all, noise_all, axis=0)
+noise_all = np.append(noise_all, noise_all, axis=0)
+
+# %% Duplicate again if using much longer window for S
+# %% comment the line below for P-only data
 noise_all = np.append(noise_all, noise_all, axis=0)
 
 ############## %% Save together with earthquake waveforms

@@ -1,5 +1,5 @@
 """
-Transfer learning for WaveDecompNet
+Transfer learning from WaveDecompNet
 with extended 2-branch U-net layers,
 Data being augmented on the fly.
 
@@ -17,27 +17,31 @@ from denoiser_util import mkdir, write_progress
 from sklearn.model_selection import train_test_split
 from torch_tools import WaveformDataset, try_gpu, CCMSELoss, MSELossOnly
 from torch_tools import training_loop_branches_augmentation
-from autoencoder_1D_models_torch import T_model, W_model
+from autoencoder_1D_models_torch import T_model_P, T_model_S
 
 # %%
 weighted_loss = False
-pttp = 10000
-npts = 3000
+# pttp = 10000  # mid-point for P-only window
+# npts = 3000  # P-only window length
+# frac = 0.05  # starting fraction not included in P shift window
+pttp = 15000  # mid-point for S window
+npts = 7500  # S window length
+frac = 0.25  # starting fraction not included in S shift window
+
 gpu_num = 0
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
-model_dir = 'Release_Middle_augmentation'
+model_dir = 'Release_Middle_augmentation_S'
 model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
 datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
 wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
-wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_STEAD_MP_both_BH_HH.hdf5'
+wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_S_STEAD_MP_both_BH_HH.hdf5'
 mkdir(model_dir)
 
 # %% Read the pre-processed datasets
-print("#" * 12 + " Loading P wave and pre-P noises " + "#" * 12)
-
+print("#" * 12 + " Loading quake signals and pre-P noises " + "#" * 12)
 with h5py.File(wave_preP, 'r') as f:
     X_train = f['pwave'][:]
     Y_train = f['noise'][:, (0 - npts):, :]
@@ -47,7 +51,7 @@ indX = np.where(X_sum == 0)[0]
 X_train = np.delete(X_train, indX, 0)
 Y_train = np.delete(Y_train, indX, 0)
 
-print("#" * 12 + " Loading P wave and STEAD noises " + "#" * 12)
+print("#" * 12 + " Loading STEAD noises " + "#" * 12)
 with h5py.File(wave_stead, 'r') as f:
     X_stead = f['pwave'][:]
     Y_stead = f['noise'][:, (0 - npts):, :]
@@ -58,18 +62,18 @@ print("#" * 12 + " Normalizing P wave and noises " + "#" * 12)
 X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
 Y_train = (Y_train - np.mean(Y_train, axis=1, keepdims=True)) / (np.std(Y_train, axis=1, keepdims=True) + 1e-12)
 
-train_size = 0.6  # 60% for training
-test_size = 0.5  # (1-80%) x 50% for testing
-# rand_seed1 = 13
-# rand_seed2 = 20
+# %% Split datasets into train, valid and test sets
+train_size = 0.6  # 60%
+test_size = 0.5  # (1-80%) x 50%
 rand_seed1 = 43
 rand_seed2 = 11
 X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
 X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=test_size, random_state=rand_seed2)
+
 # %% Convert to torch class. Or WaveformDataset_h5 for limited memory
 training_data = WaveformDataset(X_training, Y_training)
 validate_data = WaveformDataset(X_validate, Y_validate)
-test_data     = WaveformDataset(X_test, Y_test)
+test_data = WaveformDataset(X_test, Y_test)
 
 # %% Give a fixed seed for model initialization
 random.seed(0)
@@ -77,7 +81,7 @@ np.random.seed(20)
 torch.manual_seed(99)
 torch.backends.cudnn.benchmark = False
 
-# %% Set up Neural Net structure
+# %% Neural Net structure
 print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
@@ -85,7 +89,8 @@ model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_n
 # for param in model.parameters():
 #     param.requires_grad = False
 
-model = T_model(model).to(devc)
+# model = T_model_P(model).to(devc)
+model = T_model_S(model).to(devc)
 
 # %% Data parallelism for multiple GPUs,
 # %! model=model.module.to(device) for application on CPU
@@ -161,7 +166,7 @@ for X0, y0 in test_iter:
     rng = default_rng(17)
     rng_snr = default_rng(23)
     rng_sqz = default_rng(11)
-    start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)
+    start_pt = rng.choice(npts - int(npts * frac), nbatch) + int(npts * frac)
     snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
     sqz = rng_sqz.choice(2, nbatch) + 1
     pt1 = pttp - sqz * npts

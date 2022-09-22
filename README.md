@@ -15,6 +15,7 @@ conda install scipy
 conda install obspy -c conda-forge
 conda install scikit-learn
 conda install pandas
+pip install mtspec
 ```
 ## Step 0-1: Generate earthquake and noise waveforms.
 Process the event-based waveform and save both P/S wave and pre-P wave signals.

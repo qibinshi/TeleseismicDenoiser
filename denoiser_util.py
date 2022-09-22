@@ -9,19 +9,24 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scipy.signal as sgn
+from scipy.signal import detrend
 from distaz import DistAz
 from obspy.taup import TauPyModel
 from obspy import read_inventory
 from obspy import read, UTCDateTime
 from numpy.random import default_rng
+from multitaper import MTSpec, MTCross
 from scipy.interpolate import interp1d
 from scipy.fft import fft, fftfreq, ifft
-from scipy.integrate import cumulative_trapezoid
+from scipy.integrate import cumulative_trapezoid, trapezoid
 from torch_tools import Explained_Variance_score, CCLoss
 from torch_tools import WaveformDataset
 from torch.utils.data import DataLoader
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
+from matplotlib.colors import BoundaryNorm
+from matplotlib.ticker import MaxNLocator
 
 # Trim downloaded three components for same time range
 def trim_align(trace):
@@ -156,7 +161,7 @@ def process_single_event(ev, directory=None, npts=30000, noise_pts=36000, tp_aft
 
 # Process each event for only signal.
 # This is to prepare big training data.
-def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10, maxsnr=10, mindep=250, phase=1):
+def process_single_event_only(ev, directory=None, halftime=None, freq=4, rate=10, maxsnr=10, mindep=250, phase=1):
     # initialize the metadata
     meta = pd.DataFrame(columns=[
         "source_id",
@@ -165,6 +170,9 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
         "source_longitude_deg",
         "source_depth_km",
         "source_magnitude",
+        "source_strike",
+        "source_dip",
+        "source_rake",
         "station_network_code",
         "station_code",
         "station_location_code",
@@ -178,6 +186,8 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
         "trace_mean_2",
         "trace_stdv_2",
         "distance",
+        "takeoff_p",
+        "takeoff_phase",
         "azimuth"])
 
     npts = int(rate * halftime * 2)
@@ -190,6 +200,9 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
     evdp = ev.origins[0].depth / 1000.0
     org_t = ev.origins[0].time
     evmg = ev.magnitudes[0].mag
+    strike = ev.focal_mechanisms[0].nodal_planes.nodal_plane_1.strike
+    dip = ev.focal_mechanisms[0].nodal_planes.nodal_plane_1.dip
+    rake = ev.focal_mechanisms[0].nodal_planes.nodal_plane_1.rake
     pre_filt = (0.004, 0.005, 10.0, 12.0)
 
     if evdp > mindep:
@@ -208,13 +221,14 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
             try:
                 st0 = read(directory + evnm + "waves/" + stnw + "." + stco + "." + stlc + ".?H?_*")
                 st = st0.copy()
+                st.filter("lowpass", freq=freq)
             except:
                 continue
-            try:
-                st.remove_response(inventory=inv, output='VEL', pre_filt=pre_filt)
-            except:
-                continue
-            st.filter("lowpass", freq=freq)
+            # try:
+            #     st.remove_response(inventory=inv, output='VEL', pre_filt=pre_filt)
+            # except:
+            #     continue
+            # st.filter("lowpass", freq=freq)
             st.resample(rate)
             st.merge(fill_value=np.nan)
             st1 = st.copy()
@@ -222,6 +236,8 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
             arrivals = model.get_travel_times(source_depth_in_km=evdp, distance_in_degree=distdeg, phase_list=['P', 'S'])
             tp = UTCDateTime(org_t + arrivals[0].time)
             tphase = UTCDateTime(org_t + arrivals[phase].time)
+            takeoff_p = arrivals[0].takeoff_angle
+            takeoff_phase = arrivals[phase].takeoff_angle
             st.trim(tphase - halftime, tphase + halftime)
             st1.trim(tp - 50.0, tp + 50.0)
 
@@ -232,6 +248,7 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
                 pwave_amp = np.std(np.array(st1[2].data)[int(rate*50.0):])
 
                 if pwave_amp < (noise_amp * maxsnr):
+                # if pwave_amp > (noise_amp * 20):
                     for i in range(3):
                         one_pwave[:, i] = np.array(st[i].data)[0:npts]
                     one_pwave[np.isnan(one_pwave)] = 0
@@ -248,6 +265,9 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
                         "source_longitude_deg": "%.3f" % evlo,
                         "source_depth_km": "%.3f" % evdp,
                         "source_magnitude": evmg,
+                        "source_strike": strike,
+                        "source_dip": dip,
+                        "source_rake": rake,
                         "station_network_code": stnw,
                         "station_code": stco,
                         "station_location_code": stlc,
@@ -261,6 +281,8 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
                         "trace_mean_2": scale_mean[0, 2],
                         "trace_stdv_2": scale_stdv[0, 2],
                         "distance": distdeg,
+                        "takeoff_p": takeoff_p,
+                        "takeoff_phase": takeoff_phase,
                         "azimuth": azimuth}, index=[0])], ignore_index=True)
 
     return allpwave, meta
@@ -276,14 +298,18 @@ def process_single_event_only(ev, directory=None, halftime=None, freq=2, rate=10
 
 
 def plot_record_section(evid, meta_all=None, X_train=None, model=None, fig_dir=None, dt=0.1, npts=None, npts_trim=None, normalized_stack=True):
+
     meta = meta_all[(meta_all.source_id == evid)]
-    dist_az = meta[['distance', 'azimuth', 'trace_snr_db', 'trace_stdv_2']].to_numpy()
+    dist_az = meta[['distance', 'azimuth', 'takeoff_phase']].to_numpy()
+    trace_amp = meta[['trace_snr_db', 'trace_stdv_2']].to_numpy()
+    src_meca = meta[['source_strike', 'source_dip', 'source_rake']].to_numpy()
     idx_list = meta.index.values
+    batch_size = len(idx_list)
     evdp = meta.source_depth_km.unique()[0]
     evmg = meta.source_magnitude.unique()[0]
-    batch_size = len(idx_list)
+    npts_trim = min(npts_trim, int(evdp/2.2/dt))
 
-    # %% extract event data
+    # %% load the waveforms of the event
     X_1 = X_train[idx_list]
     test_data = WaveformDataset(X_1, X_1)
     test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
@@ -292,71 +318,116 @@ def plot_record_section(evid, meta_all=None, X_train=None, model=None, fig_dir=N
     nbatch = X0.size(0)
 
     X = torch.zeros(nbatch, X0.size(1), npts, dtype=torch.float64)
+    z_std = np.zeros((batch_size, 2), dtype=np.float64)
+
     for i in np.arange(nbatch):
         quake_one = X0[i, :, :]
-
         scale_mean = torch.mean(quake_one, dim=1)
         scale_std = torch.std(quake_one, dim=1) + 1e-12
-        dist_az[i, 3] = dist_az[i, 3] * scale_std[2]
+        trace_amp[i, 1] = trace_amp[i, 1] * scale_std[2]
         for j in np.arange(X0.size(1)):
             quake_one[j] = torch.div(torch.sub(quake_one[j], scale_mean[j]), scale_std[j])
         X[i] = quake_one
 
-    # %% prediction
+    # %% apply denoising
     with torch.no_grad():
         quake_denoised, noise_output = model(X)
-
     noisy_signal = X.numpy()
     denoised_signal = quake_denoised.numpy()
+
+    # %% SNR stats of velocity waveforms
+    noise_amp = np.std(noisy_signal[:, :, int(npts/2)-250:int(npts/2)-50], axis=-1)
+    signl_amp = np.std(noisy_signal[:, :, int(npts/2):int(npts/2)+200], axis=-1)
+    snr_before = 20 * np.log10(np.divide(signl_amp, noise_amp))
+
+    noise_amp = np.std(denoised_signal[:, :, int(npts / 2) - 250:int(npts / 2) - 50], axis=-1)
+    signl_amp = np.std(denoised_signal[:, :, int(npts / 2):int(npts / 2) + 200], axis=-1)
+    snr_after = 20 * np.log10(np.divide(signl_amp, noise_amp))
 
     ####################### Save the denoised traces to disk #########################
     # with h5py.File(ev_dir + '/' + str(evid) + '_quake_and_noise.hdf5', 'w') as f:
     #     f.create_dataset("pwave", data=denoised_signal)
     #     f.create_dataset("noise", data=separated_noise)
 
-    # %% integrate and trim
+    # %% trim
     timex = np.arange(0, npts_trim) * dt
     startpt = int((npts - npts_trim) / 2)
     endpt = int((npts + npts_trim) / 2)
 
-    z_std = np.zeros((batch_size, 2), dtype=np.float64)
-
+    # %% integrate
     noisy_signal = cumulative_trapezoid(noisy_signal[:, :, startpt:endpt], timex, axis=-1, initial=0)
     denoised_signal = cumulative_trapezoid(denoised_signal[:, :, startpt:endpt], timex, axis=-1, initial=0)
 
+    # %% normalized the displacement waveforms
     scale_std = np.std(denoised_signal, axis=-1, keepdims=True) + 1e-12
     denoised_signal = (denoised_signal - np.mean(denoised_signal, axis=-1, keepdims=True)) / scale_std
-    z_std[:, 1] = dist_az[:, 3] * scale_std[:, 2, 0]
-
+    z_std[:, 1] = trace_amp[:, 1] * scale_std[:, 2, 0]
     scale_std = np.std(noisy_signal, axis=-1, keepdims=True) + 1e-12
     noisy_signal = (noisy_signal - np.mean(noisy_signal, axis=-1, keepdims=True)) / scale_std
-    z_std[:, 0] = dist_az[:, 3] * scale_std[:, 2, 0]
+    z_std[:, 0] = trace_amp[:, 1] * scale_std[:, 2, 0]
 
-    #### %% discard outlier waveforms
+    # %% Discard outliers for stacking the relative amplitudes
     ave_z_std = np.mean(z_std, axis=0)
     for k in range(2):
         indX = np.where(z_std[:, k] > 20 * ave_z_std[k])[0]
         z_std[indX, k] = 0
     total_std_z = np.sum(z_std, axis=0)
 
+    # %% Reference for pre-stack
     id_az_min = np.argmin(dist_az[:, 1])
-    if dist_az[id_az_min, 2] > 1.5:
+    if trace_amp[id_az_min, 0] > 1.5:
         id_ref = id_az_min
     else:
-        id_ref = np.argmax(dist_az[:, 2])
-
+        id_ref = np.argmax(trace_amp[:, 0])
     ref_noisy = noisy_signal[id_ref, 2, :]
     ref_clean = denoised_signal[id_ref, 2, :]
 
-    # %% Plot record section
+    ###############################################################
+    ###############################################################
+    # %% Plot record sections and key measurements
     plt.close('all')
-    color = ['k', 'k']
+    color = ['k', 'b']
+    f_int = ['', '']
+    n_best = ['', '']
+    fc_best = ['', '']
+    f_int_st = ['', '']
+    n_best_st = ['', '']
+    fc_best_st = ['', '']
+    stack_spec = ['', '']
+    stack_spec_st = ['', '']
+    vr = [0.0, 0.0]
+    med = [1.0, 1.0]
+    dir = [0.0, 0.0]
+    duration = [1.0, 1.0]
     cc = np.zeros((batch_size, 2))
     ratio = np.zeros((batch_size, 2))
     flip = np.zeros((batch_size, 2), dtype=np.int32)
     shift = np.zeros((batch_size, 2), dtype=np.int32)
     stack = np.zeros((2, timex.shape[-1]), dtype=np.float64)
     stack_stretch = np.zeros((2, timex.shape[-1]), dtype=np.float64)
+
+    fig, ax = plt.subplots(3, 4, figsize=(40, 30), constrained_layout=True)
+    ax[1, 1] = plt.subplot(346, projection='polar')
+    ax[1, 0] = plt.subplot(345, projection='polar')
+    ax[2, 1] = plt.subplot(3, 4, 10, projection='polar')
+    ax[2, 0] = plt.subplot(349, projection='polar')
+    ax[2, 3] = plt.subplot(3, 4, 12, projection='polar')
+    amp_azi = 12
+    cmap = plt.get_cmap('PiYG')
+    cmap1 = plt.get_cmap('Oranges')
+
+    # %% Radiation patten projected to the lower hemisphere
+    y, x = np.mgrid[slice(0, 90 + 5, 5), slice(0, 360 + 5, 5)]
+    r, z = p_rad_pat(src_meca[0, 0], src_meca[0, 1], src_meca[0, 2], y, x)
+    levels = MaxNLocator(nbins=50).tick_values(z.min(), z.max())
+    im = ax[2, 3].contourf((x + 2.5) / 180 * np.pi, r, z, levels=levels, cmap=cmap)  ## as contours
+    cb = fig.colorbar(im, ax=ax[2, 3])
+    cb.set_label('radiation pattern')
+    ax[2, 3].set_theta_zero_location('N')
+    ax[2, 3].set_theta_direction(-1)
+    ax[2, 3].yaxis.set_major_locator(MultipleLocator(2))
+    ax[2, 3].set_ylim(0, 0.6)
+    ax[2, 3].set_title('Radiation Pattern and Ray directions', fontsize=30)
 
     ############################################################### Stack Loop ###########
     for i in range(batch_size):
@@ -368,99 +439,194 @@ def plot_record_section(evid, meta_all=None, X_train=None, model=None, fig_dir=N
         tmp_tr[0, :] = shift_pad_fix_time(tr_noisy, shift[i, 0])
         tmp_tr[1, :] = shift_pad_fix_time(tr_clean, shift[i, 1])
 
-        # %% Stacking noisy and clean waves
+        # %% Pre-stack noisy and clean waves
         for k in range(2):
             if normalized_stack:
                 stack[k, :] = stack[k, :] + tmp_tr[k, :] / batch_size
             else:
                 stack[k, :] = stack[k, :] + tmp_tr[k, :] * z_std[i, k] / total_std_z[k]
 
-
     ############################################################# Stretch Loop ###########
-    fig, ax = plt.subplots(3, 2, figsize=(30, 20), constrained_layout=True)
-    ax[1, 1] = plt.subplot(324, projection='polar')
-    ax[1, 0] = plt.subplot(323, projection='polar')
-    amp_azi = 12
-
-    # %% Stretch and shift relative to stacked wave (first row after direct shift)
     for i in range(batch_size):
         tmp_tr = np.zeros((2, timex.shape[-1]), dtype=np.float64)
 
-        # %% Stretch each trace based on CC with the stacked wave
-        time_clean, wave_clean, ratio[i, 1], cc[i, 1], flip[i, 1] = dura_cc(stack[1], denoised_signal[i, 2, :], timex,
-                                                                            maxshift=30, max_ratio=2)
-        time_noisy, wave_noisy, ratio[i, 0], cc[i, 0], flip[i, 0] = dura_cc(stack[0], noisy_signal[i, 2, :], timex,
-                                                                            maxshift=30, max_ratio=2)
+        # %% Stretch and align with the pre-stacked wave
+        time_clean,wave_clean,ratio[i, 1],cc[i, 1],flip[i, 1]=dura_cc(stack[1],denoised_signal[i, 2, :],timex,maxshift=30,max_ratio=2)
+        time_noisy,wave_noisy,ratio[i, 0],cc[i, 0],flip[i, 0]=dura_cc(stack[0],noisy_signal[i, 2, :], timex,maxshift=30, max_ratio=2)
+        ax[0, 1].plot(time_clean, wave_clean * amp_azi + dist_az[i, 1], color=color[flip[i, 1]], ls='-', lw=1)
+        ax[0, 0].plot(time_noisy, wave_noisy * amp_azi + dist_az[i, 1], color=color[flip[i, 0]], ls='-', lw=1)
         tmp_tr[1, :] = shift_pad_stretch_time(wave_clean, timex, time_clean)
         tmp_tr[0, :] = shift_pad_stretch_time(wave_noisy, timex, time_noisy)
 
-        # %% stacking after stretch, shift and flip
         for k in range(2):
+            # %% Stack the stretched time series
             if normalized_stack:
                 stack_stretch[k, :] = stack_stretch[k, :] + tmp_tr[k, :] / batch_size
             else:
                 stack_stretch[k, :] = stack_stretch[k, :] + tmp_tr[k, :] * z_std[i, k] / total_std_z[k]
 
+            clr = color[flip[i, k]]
+            ax[1, k].plot(dist_az[i, 1]/180*np.pi, ratio[i, k], marker='o', mfc=clr, mec=clr, ms=cc[i, k] * 20)
+            ax[2, k].plot(dist_az[i, 2]/180*np.pi, ratio[i, k], marker='o', mfc=clr, mec=clr, ms=cc[i, k] * 20)
 
-            if flip[i, k]:
-                color[k] = 'b'  # plot the flipped traces in blue
+            # %% MTSpec --Un-stretched
+            if k == 0:
+                Py = MTSpec(detrend(noisy_signal[i, 2, int(npts_trim / 2 - 10): 0 - int(npts_trim / 6)]), 4.0, 6, dt)
             else:
-                color[k] = 'k'
+                Py = MTSpec(detrend(denoised_signal[i, 2, int(npts_trim / 2 - 10): 0 - int(npts_trim / 6)]), 4.0, 6, dt)
+            freq, spec = Py.rspec()
+            max_spec = np.nanmax(spec[freq < 0.05])
+            spec_norm = spec / max_spec * np.exp(freq * 0.15)
+            ax[0, 2 + k].loglog(freq, spec_norm, ls='-', color='0.8', lw=2)
+            # spec_crct = spec * distance_factor / (radiation_pattern + 1e-12)
+            # ax[1, 2+k].loglog(freq, spec_crct, ls='-', color='0.8', lw=2)
 
-            ax[1, k].plot(dist_az[i, 1] / 180 * np.pi, ratio[i, k], marker='o', mfc=color[k], mec=color[k],
-                          ms=cc[i, k] * 20)
-            ax[2, k].plot(dist_az[i, 0], ratio[i, k], marker='o', mfc=color[k], mec=color[k],
-                          ms=cc[i, k] * 20)
+            if i == 0:
+                stack_spec[k] = spec_norm
+            else:
+                stack_spec[k] = spec_norm + stack_spec[k]
 
-        ax[0, 1].plot(time_clean, wave_clean * amp_azi + dist_az[i, 1], color=color[1], linestyle='-', linewidth=1)
-        ax[0, 0].plot(time_noisy, wave_noisy * amp_azi + dist_az[i, 1], color=color[0], linestyle='-', linewidth=1)
+            # %% MTSpec --stretched
+            # Py_stretch = MTSpec(tmp_tr[k, int(npts_trim / 5): 0 - int(npts_trim / 6)], 4.0, 6, dt)
+            # freq_st, spec_st = Py_stretch.rspec()
+            # max_spec = np.nanmax(spec_st[freq_st < 0.05])
+            # spec_norm_st = spec_st / max_spec * np.exp(freq_st * 0.15)
+            # ax[1, 2+k].loglog(freq_st, spec_norm_st, ls='-', color='0.8', lw=2)
+            #
+            # if i == 0:
+            #     stack_spec_st[k] = spec_norm_st
+            # else:
+            #     stack_spec_st[k] = spec_norm_st + stack_spec_st[k]
 
     ####################################################### After Stretch Loop ###########
-    vr = [0.0, 0.0]
-    med = [1.0, 1.0]
-    dir = [0.0, 0.0]
-    abs_amp = [0.0, 0.0]
+    # %% project duration ratios to radiation pattern
+    takeoffs_rad = np.sin(dist_az[:, 2]/360*np.pi) / np.cos(dist_az[:, 2]/360*np.pi)
+    ray = ax[2, 3].scatter(dist_az[:, 1]/180*np.pi, takeoffs_rad, marker='o', c=ratio[:, 1], s=cc[:, 1] * 100, edgecolors='w', cmap=cmap1, vmin=0.8, vmax=1.2)
+    cb = plt.colorbar(ray, ax=ax[2, 3])
+    cb.set_label('relative duration')
+
     for k in range(2):
-        abs_amp[k] = np.nanmax(stack_stretch[k, :]) * total_std_z[k] / batch_size
-        ##### Fit the ellipse of directivity
+        # %% Model the stacked spectrum --Un-stretched
+        stack_spec[k] = stack_spec[k] / batch_size
+        n_best[k], fc_best[k] = fit_spec(freq[np.logical_and(freq < 1, freq > 0)], stack_spec[k][np.logical_and(freq < 1, freq > 0)])
+        f_int[k] = flux_int(freq, stack_spec[k], fc_best[k], n_best[k])
+        ax[0, 2+k].loglog(freq, stack_spec[k], ls='-', color='g', lw=5)
+        ax[0, 2+k].loglog(freq, 1.0 / (1.0 + (freq/fc_best[k])**n_best[k]), ls='--', color='b', lw=5)
+        ax[0, 2+k].set_ylim(1e-15, 1e2)
+        ax[0, 2+k].set_xlabel('frequency (Hz)', fontsize=24)
+        ax[0, 2+k].set_ylabel('amplitude spectrum', fontsize=24)
+        ax[0, 2+k].set_title(f'falloff {n_best[k]:.1f} fc {fc_best[k]:.2f} Er/M^2 {f_int[k]:.1e}', fontsize=30)
+
+        # %% Model the stacked spectrum --stretched
+        # stack_spec_st[k] = stack_spec_st[k] / batch_size
+        # n_best_st[k], fc_best_st[k] = fit_spec(freq_st[np.logical_and(freq_st < 1, freq_st > 0)], stack_spec_st[k][np.logical_and(freq_st < 1, freq_st > 0)])
+        # f_int_st[k] = flux_int(freq_st, stack_spec_st[k], fc_best_st[k], n_best_st[k])
+        # ax[1, 2+k].loglog(freq_st, stack_spec_st[k], ls='-', color='g', lw=5)
+        # ax[1, 2+k].loglog(freq_st, 1.0 / (1.0 + (freq_st / fc_best_st[k]) ** n_best_st[k]), ls='--', color='b', lw=5)
+        # ax[1, 2+k].set_ylim(1e-15, 1e2)
+        # ax[1, 2+k].set_xlabel('frequency (Hz)', fontsize=24)
+        # ax[1, 2+k].set_ylabel('amplitude spectrum', fontsize=24)
+        # ax[1, 2+k].set_title(f'(Stretched)falloff {n_best_st[k]:.1f} fc {fc_best_st[k]:.2f} Er/M {f_int_st[k]:.1e}', fontsize=30)
+
+        # %% Model the directivity ellipse
         vr[k], med[k], dir[k] = ellipse_directivity(dist_az[:, 1], ratio[:, k], cc[:, k])
         azimuth = np.arange(0.0, 360.0, 2.0, dtype=np.float64)
         r_pred = med[k] / (1 - vr[k] * np.cos((azimuth - dir[k]) / 180.0 * np.pi))
-        if vr[k] > 0.2:
+        if vr[k] > 0.1:
             clr = '-r'
         else:
             clr = '-y'
         ax[1, k].plot(azimuth / 180.0 * np.pi, r_pred, clr, linewidth=12, alpha=0.2)
-        ax[1, k].set_title(f'Vrup/V = {vr[k]}, dir_azi = {dir[k]}, abs_amp_mean = {abs_amp[k]}', fontsize=20)
-        #####
-        # %% plot the stack of stretched waves
+
+        # %% Plot the stacked time series
         stacked_disp = stack_stretch[k, :] * amp_azi
-        # stacked_velo = np.gradient(stacked_disp, timex)
-        # stacked_ener = cumulative_trapezoid(np.square(stacked_velo), timex, axis=-1, initial=0)/24
-        # ax[0, k].plot(timex, stacked_ener + np.max(dist_az[:, 1]) + (50 * 1 + 10), '-r', linewidth=5)
+        stacked_velo = np.gradient(stacked_disp, timex)
+        stacked_acce = np.gradient(stacked_velo, timex)
+        stacked_ener = cumulative_trapezoid(np.square(stacked_velo), timex, axis=-1, initial=0)
+        stacked_ener = stacked_ener / (np.std(stacked_ener) + 1e-12) * amp_azi * 3
+        ax[0, k].plot(timex, stacked_ener + np.max(dist_az[:, 1]) + (50 * 1 + 15), '-r', linewidth=5)
         ax[0, k].plot(timex, stacked_disp + np.max(dist_az[:, 1]) + (50 * 1 + 10), '-g', linewidth=5)
         ax[0, k].set_xlim(timex[0], timex[-1])
 
-        # %% STA/LTA of stacked waves
-        pt_start, pt_end, sta_lta1, sta_lta2, sta, lta = dura_amp(stacked_disp)
-        ax[0, k].plot(pt_start * dt, stacked_disp[pt_start] + np.max(dist_az[:, 1]) + (50 * 1 + 10), 'or', ms=10)
-        ax[0, k].plot(pt_end * dt, stacked_disp[pt_end] + np.max(dist_az[:, 1]) + (50 * 1 + 10), 'og', ms=10)
+        # %% MTSpec stacked velocity
+        # Py_v= MTSpec(stacked_velo[int(npts_trim / 5): 0 - int(npts_trim / 6)], 4.0, 6, dt)
+        # Py_a = MTSpec(stacked_acce[int(npts_trim / 5): 0 - int(npts_trim / 6)], 4.0, 6, dt)
+        # Py_d = MTSpec(stacked_disp[int(npts_trim / 5): 0 - int(npts_trim / 6)], 4.0, 6, dt)
+        # freq_v, spec_v = Py_v.rspec()
+        # freq_a, spec_a = Py_a.rspec()
+        # freq_d, spec_d = Py_d.rspec()
+        # max_a = np.nanmax(spec_a)
+        # corner = freq_a[spec_a > 0.85 * max_a]
+        #
+        # if k == 0:
+        #     ax[0, 2].loglog(freq_v, spec_v, ls='-', color='0.3', label='noisy stacked velocity', lw=2)
+        #     ax[0, 2].loglog(freq_a, spec_a, ls='-', color='0.0', label='noisy stacked acceleration', lw=2)
+        #     ax[0, 2].loglog(freq_d, spec_d, ls='-', color='0.6', label='noisy stacked displacement', lw=2)
+        #     org_ener_noisy = trapezoid(np.square(spec_v[freq_v < 5]), freq_v[freq_v < 5], axis=-1)
+        #     Res_ener_noisy = np.sum(np.square(spec_v[freq_v == corner[0]]) * corner[0])
+        #     Nor_ener_noisy = trapezoid(np.square(spec_v[freq_v < corner[0]]), freq_v[freq_v < corner[0]], axis=-1)
+        #
+        # else:
+        #     ax[0, 2].loglog(freq_v, spec_v, '-r', label='denoised stacked velocity', lw=2)
+        #     ax[0, 2].loglog(freq_a, spec_a, '-c', label='denoised stacked acceleration', lw=2)
+        #     ax[0, 2].loglog(freq_d, spec_d, '-g', label='denoised stacked displacement', lw=2)
+        #     org_ener_clean = trapezoid(np.square(spec_v[freq_v < 5]), freq_v[freq_v < 5], axis=-1)
+        #     Res_ener_clean = np.sum(np.square(spec_v[freq_v == corner[0]]) * corner[0])
+        #     Nor_ener_clean = trapezoid(np.square(spec_v[freq_v < corner[0]]), freq_v[freq_v < corner[0]], axis=-1)
+        #
+        #     print(Res_ener_clean, Nor_ener_clean, org_ener_clean)
+        #     ax[0, 2].legend(loc=3)
+        #     ax[0, 2].set_xlabel('frequency (Hz)', fontsize=24)
+        #     ax[0, 2].set_ylabel('amplitude spectrum', fontsize=24)
+            # ax[0, 2].axvline(corner[0], linestyle='--', color='k')
+            # ax[0, 2].axvline(corner[-1], linestyle='--', color='k')
+            # ax[0, 2].set_title(f'Res-E={Res_ener_clean:.0f} low-f-E={Nor_ener_clean:.0f}', fontsize=30)
+
+        # # %% STA/LTA of stacked waves
+        # pt_start, pt_end, sta_lta1, sta_lta2, sta, lta = dura_amp(stacked_disp)
+        # %% 0.05 and 0.95 of max energy
+        max_energy = np.nanmax(stacked_ener[int(npts_trim/3):0-int(npts_trim/6)])
+        pre = timex[stacked_ener < 0.05 * max_energy]
+        pos = timex[stacked_ener > 0.90 * max_energy]
+        pt_start = int(pre[-1] / dt)
+        pt_end = int(pos[0] / dt)
+        duration[k] = pos[0] - pre[-1]
+        ax[0, k].plot(pt_start * dt, stacked_ener[pt_start] + np.max(dist_az[:, 1]) + (50 * 1 + 15), 'ok', ms=10)
+        ax[0, k].plot(pt_end * dt, stacked_ener[pt_end] + np.max(dist_az[:, 1]) + (50 * 1 + 15), 'oy', ms=10)
+        ax[0, k].plot(pt_start * dt, stacked_disp[pt_start] + np.max(dist_az[:, 1]) + (50 * 1 + 10), 'ok', ms=10)
+        ax[0, k].plot(pt_end * dt, stacked_disp[pt_end] + np.max(dist_az[:, 1]) + (50 * 1 + 10), 'oy', ms=10)
 
         # %% axes limits, titles and labels
         ax[0, k].set_xlim(timex[0], timex[-1])
-        ax[0, k].set_ylim(np.min(dist_az[:, 1]) - (50 * 1 + 10), np.max(dist_az[:, 1]) + (50 * 1 + 100))
-        ax[0, k].set_ylabel('azimuth', fontsize=20)
+        ax[0, k].set_ylim(np.min(dist_az[:, 1]) - (50 * 1 + 10), np.max(dist_az[:, 1]) + (50 * 1 + 120))
+        ax[0, k].set_ylabel('azimuth', fontsize=24)
+        ax[1, k].yaxis.set_major_locator(MultipleLocator(0.5))
+        ax[1, k].yaxis.set_minor_locator(MultipleLocator(0.25))
+        ax[1, k].set_theta_zero_location('N')
+        ax[1, k].set_theta_direction(-1)
         ax[1, k].set_ylim(0, 2.2)
+        ax[2, k].yaxis.set_major_locator(MultipleLocator(0.5))
+        ax[2, k].yaxis.set_minor_locator(MultipleLocator(0.25))
+        ax[2, k].set_theta_zero_location('S')
         ax[2, k].set_ylim(0, 2.2)
-        ax[2, k].set_xlim(25, 95)
-        ax[2, k].set_ylabel('ratio', fontsize=20)
-        ax[2, k].set_xlabel('distance', fontsize=20)
+        ax[2, k].set_xlim(0, np.pi/2)
+        ax[1, k].set_title(f'Vrup/V = {vr[k]:.3f} \ndirectivity = {dir[k]:.0f} \nduration = {duration[k]:.1f} s /{med[k]:.2f}', fontsize=30)
 
-    ax[0, 0].set_title(f'Noisy Event {evid} depth={evdp} km / M={evmg}', fontsize=20)
-    ax[0, 1].set_title('Denoised waves', fontsize=20)
+    # %% SNR histograms
+    bins = np.linspace(0, 100, 20)
+    ax[2, 2].hist(snr_before.flatten(), bins=bins, density=True, histtype='stepfilled', color='0.6', alpha=0.5, label='noisy', lw=2)
+    ax[2, 2].hist(snr_after.flatten(), bins=bins, density=True, histtype='stepfilled', color='r', alpha=0.5, label='denoised', lw=2)
+    ax[2, 2].set_xlabel('SNR', fontsize=24)
+    ax[2, 2].set_ylabel('density', fontsize=24)
+    ax[2, 2].legend(loc=1)
+
+    ax[0, 0].set_title(f'Noisy Event {evid} depth={evdp:.0f} km / M{evmg:.1f}', fontsize=30)
+    ax[0, 1].set_title('Denoised waves', fontsize=30)
 
     plt.savefig(fig_dir + '/quake_' + str(evid) + '_record_section_P.png')
 
+    # return evmg, evdp, duration[1]/med[1], vr[1], dir[1], duration[0]/med[0], vr[0], dir[0], Res_ener_clean, Nor_ener_clean, org_ener_clean, Res_ener_noisy, Nor_ener_noisy, org_ener_noisy
+    return evmg, evdp, duration[1] / med[1], vr[1], dir[1], duration[0] / med[0], vr[0], dir[0], f_int[1], f_int[0], n_best[1], n_best[0], fc_best[1], fc_best[0], batch_size
 
 def plot_application(noisy_signal, denoised_signal, separated_noise, idx, directory=None, dt=0.1, npts=None):
     plt.close("all")
@@ -706,8 +872,8 @@ def dura_amp(wave2, long=10, short=5):
     return pt1, pt2, ratio1, ratio2, short_average, long_average
 
 
-def ellipse_directivity(azimuth, ratio, wgt, k1_itv=0.1, k2_itv=0.1, k3_itv=20.0):
-    k1 = np.arange(0.0, 0.9, k1_itv, dtype=np.float64)
+def ellipse_directivity(azimuth, ratio, wgt, k1_itv=0.002, k2_itv=0.1, k3_itv=5.0):
+    k1 = np.arange(0.0, 0.4, k1_itv, dtype=np.float64)
     k2 = np.arange(0.6, 1.5, k2_itv, dtype=np.float64)
     k3 = np.arange(0.0, 360.0, k3_itv, dtype=np.float64)
     err_min = 1000
@@ -727,10 +893,84 @@ def ellipse_directivity(azimuth, ratio, wgt, k1_itv=0.1, k2_itv=0.1, k3_itv=20.0
                     dir0 = dir
     return vr0, med0, dir0
 
+def p_rad_pat(strike, dip, rake, takeoff, azimuth):
+    strike = strike / 180.0 * np.pi
+    dip = dip / 180.0 * np.pi
+    rake = rake / 180.0 * np.pi
+    takeoff = takeoff / 180.0 * np.pi
+    azimuth = azimuth / 180.0 * np.pi
+
+    dd = azimuth - strike
+    aa = np.sin(dd)
+    bb = np.sin(2 * takeoff)
+    cc = np.square(np.sin(takeoff))
+    ee = np.cos(takeoff)
+    ff = np.cos(rake)
+    gg = np.sin(rake)
+    hh = np.sin(dip) * ff * cc * np.sin(2 * dd)
+    ii = np.cos(dip) * ff * bb * np.cos(dd)
+    jj = np.sin(2 * dip) * gg * (np.square(ee) - cc * np.square(aa))
+    kk = np.cos(2 * dip) * gg * bb * aa
+    p_amp = hh - ii + jj + kk
+
+    r = np.sin(takeoff/2) / np.cos(takeoff/2)
+
+    return r, p_amp
+
+
+def fit_spec(freq, spec, dn=0.1, df=0.01):
+    # %% resample frequency in log space
+    log_freq = np.squeeze(np.log10(freq))
+    log_spec = np.squeeze(np.log10(spec))
+    interp_f = interp1d(log_freq, log_spec, bounds_error=False, fill_value=0.)
+    f = np.arange(log_freq[0], log_freq[-1], df)
+    log_spec_new = interp_f(f)
+
+    # %% grid search
+    l2_min = 10000.0
+    n_best = 2
+    fc_best = -2
+    for n in np.arange(0.0, 3.0, dn, dtype=np.float64):
+        for fc in np.arange(-3.0, 0.4, df, dtype=np.float64):
+            model_func = 1.0 / (1.0 + 10**((f-fc)*n))
+            l2 = np.sum(np.square(log_spec_new - np.log10(model_func)))
+            if l2 < l2_min:
+                l2_min = l2
+                n_best = n
+                fc_best = 10**fc
+
+    return n_best, fc_best
+
+
+def flux_int(freq, spec, fc, n):
+    model = 1.0 / (1.0 + (freq[freq > 1] / fc) ** n)
+    int1 = trapezoid(np.square(freq[freq < 1] * spec[freq < 1]), freq[freq < 1], axis=-1)
+    int2 = trapezoid(np.square(freq[freq > 1] * model),          freq[freq > 1], axis=-1)
+
+    density = 3e3
+    vp = 5e3
+    const = np.pi**2 * 8 / (vp**5 * 15 * density)
+
+    return (int1+int2)*const
+
+
+def correct_distance(dist):
+
+    return dist * 6371.0
+
 
 def mkdir(dir_path):
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
+
+def get_vp_vs(depth):
+
+    table = np.loadtxt('IASP91.txt')
+    deps = table[:, 0]
+    vps = table[deps < depth, 2]
+    vss = table[deps < depth, 3]
+
+    return vps[-1], vss[-1]
 
 
 

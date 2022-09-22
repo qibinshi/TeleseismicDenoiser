@@ -20,7 +20,6 @@ phase = 0
 # halftime = 375.0
 # phase = 1
 samplerate = 10
-freq = 2.0
 npts = int(halftime*2*samplerate)
 allpwave = np.zeros((0, npts, 3), dtype=np.double)
 meta = pd.DataFrame(columns=[
@@ -30,6 +29,9 @@ meta = pd.DataFrame(columns=[
         "source_longitude_deg",
         "source_depth_km",
         "source_magnitude",
+        "source_strike",
+        "source_dip",
+        "source_rake",
         "station_network_code",
         "station_code",
         "station_location_code",
@@ -43,17 +45,22 @@ meta = pd.DataFrame(columns=[
         "trace_mean_2",
         "trace_stdv_2",
         "distance",
+        "takeoff_p",
+        "takeoff_phase",
         "azimuth"])
 
-workdir = '/mnt/DATA0/qibin_data/event_data/window_startOrg-3600/M6_2000-2021/'
-datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
+workdir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M5.5-6.0/2000_2021/'
+datadir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M5.5-6.0/'
+# workdir = '/mnt/DATA0/qibin_data/event_data/window_startOrg-3600/M6_2000-2021/'
+# datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
 since = time.time()
 
 cat = read_events(workdir + "*.xml")
 print(len(cat), "events in total")
 
-partial_func = partial(process_single_event_only, directory=workdir, halftime=halftime, maxsnr=10, mindep=250, phase=phase)
-num_proc = os.cpu_count()
+partial_func = partial(process_single_event_only, directory=workdir, halftime=halftime, maxsnr=10000, mindep=100, phase=phase)
+# num_proc = os.cpu_count()
+num_proc = 24
 with Pool(processes=num_proc) as pool:
     print("Total number of processes: ", num_proc)
     result = pool.map(partial_func, cat)
@@ -70,8 +77,8 @@ for i in range(len(cat)):
 
 elapseT = time.time() - since
 print("Added together multiprocessors. Time elapsed: %.2f s" % elapseT)
-with h5py.File(datadir + 'M6_deep250km_SNRmax10_P_noResp.hdf5', 'w') as f:
+with h5py.File(datadir + 'M55_deep100km_allSNR_P.hdf5', 'w') as f:
     f.create_dataset("pwave", data=allpwave)
 
-meta.to_csv(datadir + "metadata_M6_deep250km_SNRmax10_P_noResp.csv", sep=',', index=False)
+meta.to_csv(datadir + "metadata_M55_deep100km_allSNR_P.csv", sep=',', index=False)
 print("Total traces of data:", allpwave.shape[0])

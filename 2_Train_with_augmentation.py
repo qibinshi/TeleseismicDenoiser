@@ -58,7 +58,7 @@ with h5py.File(wave_stead, 'r') as f:
 X_train = np.append(X_train, X_stead, axis=0)
 Y_train = np.append(Y_train, Y_stead, axis=0)
 
-print("#" * 12 + " Normalizing P wave and noises " + "#" * 12)
+print("#" * 12 + " Normalizing signal and noises " + "#" * 12)
 X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
 Y_train = (Y_train - np.mean(Y_train, axis=1, keepdims=True)) / (np.std(Y_train, axis=1, keepdims=True) + 1e-12)
 

@@ -11,15 +11,16 @@ import matplotlib.pyplot as plt
 
 nptP = 3000
 nptS = 7500
-preP = 50.0
-preS = 200.0
+preP = 150.0
+preS = 300.0
 aftP = nptP * 0.1 - preP
 aftS = nptS * 0.1 - preS
 devc = try_gpu(i=10)
+workdir = '/Users/qibin/Projects/MX22/inv/'
 # sac_dir = 'Petrolia_tel'
 # sac_dir = 'groun_vel_aceh'
-sac_dir = 'Yangbi_ground_vel'
-mkdir('denoised_mergedPS_' + sac_dir)
+sac_dir = 'MX_rtz'
+mkdir(workdir + 'denoised_mergedPS_' + sac_dir)
 P_model = 'Release_Middle_augmentation/Branch_Encoder_Decoder_LSTM_Model.pth'
 S_model = 'Release_Middle_augmentation_S_batchsize512/Branch_Encoder_Decoder_LSTM_Model.pth'
 
@@ -31,7 +32,7 @@ sta_idx = []
 
 
 # %% Prepare P and S separately. Need to mark tp as a and ts as t0
-stalist = glob.glob(sac_dir + '/*.BHZ')
+stalist = glob.glob(workdir + sac_dir + '/*.z')
 print('Number of stations: ', len(stalist))
 for j in range(len(stalist)):
     sta = stalist[j]
@@ -123,7 +124,7 @@ for j in range(denoised_P.shape[0]):
 
         st[i].stats.starttime = UTCDateTime(st[i].stats.starttime - st[i].stats.sac.b + st[i].stats.sac.a - preP)
 
-        st[i].write('denoised_mergedPS_' + sac_dir + '/' + nt + '.' + nm + '.' + lc + '.' + ch, format='SAC')
+        st[i].write(workdir + 'denoised_mergedPS_' + sac_dir + '/' + nt + '.' + nm + '.' + lc + '.' + ch, format='SAC')
 
 
 

@@ -13,22 +13,22 @@ from denoiser_util import trim_align, downsample_series
 
 
 # %%
-# in_pts = 3000  # length for P wave training
-in_pts = 7500  # length for P+S wave training
+in_pts = 3000  # length for P wave training
+# in_pts = 7500  # length for P+S wave training
 sample_rate = 10
-maxfreq = 2.0
+maxfreq = 4.0
 
-datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-cleanwave_mat = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
-model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_S_STEAD_MP_both_BH_HH.hdf5'
+datadir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M6.0plus/matfiles_for_denoiser/'
+cleanwave_mat = datadir + 'Alldepths_snr25_2000_21_sample10_lpass4_P_preP_MP_both_BH_HH.hdf5'
+model_dataset = datadir + 'Alldepths_snr25_2000_21_sample10_lpass4_P_STEAD_MP_both_BH_HH.hdf5'
 
 # %% POHA
 shuffle_phase = False
-waveform_mseed = '../WaveDecompNet-paper/work/continuous_waveforms/IU.POHA.00.20210731-20210901.mseed'
+waveform_mseed = '../projects/WaveDecompNet-paper/work/continuous_waveforms/IU.POHA.00.20210731-20210901.mseed'
 
 # %% STEAD
-file_name = '/mnt/DATA0/qibin_data/STEAD/merge.hdf5'
-csv_file  = '/mnt/DATA0/qibin_data/STEAD/merge.csv'
+file_name = '/data/whd01/qibin_data/STEAD/merge.hdf5'
+csv_file  = '/data/whd01/qibin_data/STEAD/merge.csv'
 
 ############## Load POHA noise ##############
 print('--- Reading POHA waveform, it may take a few minutes ...')
@@ -96,7 +96,7 @@ noise_all = np.append(noise_all, noise_all, axis=0)
 
 # %% Duplicate again if using much longer window for S
 # %% comment the line below for P-only data
-noise_all = np.append(noise_all, noise_all, axis=0)
+# noise_all = np.append(noise_all, noise_all, axis=0)
 
 ############## %% Save together with earthquake waveforms
 print('--- Reading quake waveform, it is quick')
@@ -109,7 +109,7 @@ wv = np.delete(wv, indX, 0)
 N_traces = min(noise_all.shape[0], wv.shape[0])
 print(f'----- {N_traces} traces totally')
 
-quake_waves = np.zeros((N_traces, 30000, 3), dtype=np.double)
+quake_waves = np.zeros((N_traces, 50000, 3), dtype=np.double)
 noise_waves = np.zeros((N_traces, in_pts, 3), dtype=np.double)
 for i in range(N_traces):
     noise_one = noise_all[i, :, :]

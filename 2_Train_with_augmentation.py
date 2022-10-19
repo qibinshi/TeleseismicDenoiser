@@ -17,27 +17,26 @@ from denoiser_util import mkdir, write_progress
 from sklearn.model_selection import train_test_split
 from torch_tools import WaveformDataset, try_gpu, CCMSELoss, MSELossOnly
 from torch_tools import training_loop_branches_augmentation
-from autoencoder_1D_models_torch import T_model_P, T_model_S
+from autoencoder_1D_models_torch import T_model, T_model_S
 
 # %%
+# mid_pt = 25000  # mid-point of P window
+mid_pt = 20000  # mid-point of S window
+strmax = 4
+# npts = 1500  # P window length
+npts = 5000  # S window length
+frac = 0.1  # starting fraction not included in P shift window
 weighted_loss = False
-# pttp = 10000  # mid-point for P-only window
-# npts = 3000  # P-only window length
-# frac = 0.05  # starting fraction not included in P shift window
-pttp = 15000  # mid-point for S window
-npts = 7500  # S window length
-frac = 0.25  # starting fraction not included in S shift window
 
 gpu_num = 0
 devc = try_gpu(i=gpu_num)
 bottleneck_name = 'LSTM'
-model_dir = 'Release_Middle_augmentation_S'
+model_dir = 'Release_Middle_augmentation_S4Hz_500s'
 model_structure = "Branch_Encoder_Decoder"
 progress_file = model_dir + '/Running_progress.txt'
 model_name = model_structure + "_" + bottleneck_name
-datadir = '/mnt/DATA0/qibin_data/matfiles_for_denoiser/'
-wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
-wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_S_STEAD_MP_both_BH_HH.hdf5'
+datadir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
+wave_preP = datadir + 'Alldepths_snr10_sample10_lpass4_S_TRZ.hdf5'
 mkdir(model_dir)
 
 # %% Read the pre-processed datasets
@@ -50,13 +49,6 @@ X_sum = np.sum(np.square(X_train), axis=1)
 indX = np.where(X_sum == 0)[0]
 X_train = np.delete(X_train, indX, 0)
 Y_train = np.delete(Y_train, indX, 0)
-
-print("#" * 12 + " Loading STEAD noises " + "#" * 12)
-with h5py.File(wave_stead, 'r') as f:
-    X_stead = f['pwave'][:]
-    Y_stead = f['noise'][:, (0 - npts):, :]
-X_train = np.append(X_train, X_stead, axis=0)
-Y_train = np.append(Y_train, Y_stead, axis=0)
 
 print("#" * 12 + " Normalizing signal and noises " + "#" * 12)
 X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
@@ -85,20 +77,20 @@ torch.backends.cudnn.benchmark = False
 print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
 
 model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
+# # %% transfer learn P model
+# model = torch.load('Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
 
 # for param in model.parameters():
 #     param.requires_grad = False
 
-# model = T_model_P(model).to(devc)
-model = T_model_S(model).to(devc)
-
 # %% Data parallelism for multiple GPUs,
 # %! model=model.module.to(device) for application on CPU
 # model = T_model(model)
-# if torch.cuda.device_count() > 1:
-#     print("Let's use", torch.cuda.device_count(), "GPUs!")
-#     model = nn.DataParallel(model)
-# model.to(devc)
+model = T_model_S(model)
+if torch.cuda.device_count() > 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    model = nn.DataParallel(model, device_ids=[0, 1, 2, 3])
+model.to(devc)
 
 n_para = 0
 for idx, param in enumerate(model.parameters()):
@@ -126,12 +118,13 @@ model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches
                                                                                  epochs=epochs, patience=patience,
                                                                                  device=devc,
                                                                                  minimum_epochs=minimum_epochs,
-                                                                                 npts=npts, pttp=pttp)
+                                                                                 npts=npts, mid_pt=mid_pt, strmax=strmax)
 print("Training is done!")
 write_progress(progress_file, text_contents="Training is done!" + '\n')
 
 # %% Save the model
 torch.save(model, model_dir + f'/{model_name}_Model.pth')
+# torch.save(model.state_dict(), model_dir + f'/{model_name}_Model_weights.pth')
 
 # %% Save the training history
 loss = avg_train_losses
@@ -166,11 +159,11 @@ for X0, y0 in test_iter:
     rng = default_rng(17)
     rng_snr = default_rng(23)
     rng_sqz = default_rng(11)
-    start_pt = rng.choice(npts - int(npts * frac), nbatch) + int(npts * frac)
+    start_pt = rng.choice(npts - int(npts * frac * 2.0), nbatch) + int(npts * frac)
     snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
-    sqz = rng_sqz.choice(2, nbatch) + 1
-    pt1 = pttp - sqz * npts
-    pt2 = pttp + sqz * npts
+    sqz = rng_sqz.choice(strmax, nbatch) + 1
+    pt1 = mid_pt - sqz * npts
+    pt2 = mid_pt + sqz * npts
 
     for i in np.arange(nbatch):
         # %% squeeze earthquake signal

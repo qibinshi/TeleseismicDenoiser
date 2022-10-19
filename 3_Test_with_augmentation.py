@@ -24,20 +24,18 @@ matplotlib.rcParams.update({'font.size': 12})
 
 # %%
 dt = 0.1
-# pttp = 10000  # mid-point for P-only window
-# npts = 3000  # P-only window length
-# frac = 0.05  # starting fraction not included in P shift window
-pttp = 15000  # mid-point for S window
-npts = 7500  # S window length
-frac = 0.25  # starting fraction not included in S shift window
+# mid_pt = 25000  # mid-point of P window
+mid_pt = 20000  # mid-point of S window
+strmax = 6
+npts = 1500  # window length
+frac = 0.2  # smallest window start
 batch_size = 100
 gpu_num = 10
 devc = try_gpu(i=gpu_num)
 datadir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
-wave_preP = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_P_preP_MP_both_BH_HH.hdf5'
-wave_stead = datadir + 'Alldepths_snr25_2000_21_sample10_lpass2_S_STEAD_MP_both_BH_HH.hdf5'
+wave_preP = datadir + 'Alldepths_snr10_sample10_lpass4_S_TRZ.hdf5'
 model_name = "Branch_Encoder_Decoder_LSTM"
-model_dir = 'Release_Middle_augmentation_S_batchsize512'
+model_dir = 'Release_Middle_augmentation_S4Hz_500s'
 fig_dir = model_dir + '/figures'
 mkdir(fig_dir)
 
@@ -51,13 +49,6 @@ X_sum = np.sum(np.square(X_train), axis=1)
 indX = np.where(X_sum == 0)[0]
 X_train = np.delete(X_train, indX, 0)
 Y_train = np.delete(Y_train, indX, 0)
-
-print("#" * 12 + " Loading STEAD noises " + "#" * 12)
-with h5py.File(wave_stead, 'r') as f:
-    X_stead = f['pwave'][:]
-    Y_stead = f['noise'][:, (0 - npts):, :]
-X_train = np.append(X_train, X_stead, axis=0)
-Y_train = np.append(Y_train, Y_stead, axis=0)
 
 print("#" * 12 + " Normalizing signal and noises " + "#" * 12)
 X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
@@ -76,7 +67,8 @@ test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 # %% Model
 print(">_<Loading model ...")
-model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth')
+# model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth')
+model = torch.load('Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth')
 model = model.module.to(devc)
 model.eval()
 
@@ -90,11 +82,11 @@ with torch.no_grad():
     rng = default_rng(17)
     rng_snr = default_rng(23)
     rng_sqz = default_rng(11)
-    start_pt = rng.choice(npts - int(npts * frac), nbatch) + int(npts * frac)
+    start_pt = rng.choice(npts - int(npts * frac * 2), nbatch) + int(npts * frac)
     snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
-    sqz = rng_sqz.choice(2, nbatch) + 1
-    pt1 = pttp - sqz * npts
-    pt2 = pttp + sqz * npts
+    sqz = rng_sqz.choice(strmax, nbatch) + 1
+    pt1 = mid_pt - sqz * npts
+    pt2 = mid_pt + sqz * npts
 
     quak2 = torch.zeros(nbatch, y0.size(1), npts * 2, dtype=torch.float64)
     quake = torch.zeros(y0.size(), dtype=torch.float64)
@@ -145,7 +137,10 @@ elapseT = time.time() - since
 print("All are plotted. Time elapsed: %.2f s" % elapseT)
 
 # %% get the scores for each thread
-scores = np.zeros((0, 3, 4), dtype=np.double)
+# scores = np.zeros((0, 3, 4), dtype=np.double)
+#################################################
+scores = np.zeros((0, 3, 6), dtype=np.double)   #
+#################################################
 for i in range(batch_size):
     scores = np.append(scores, result[i], axis=0)
     print(i, 'th score added')
@@ -155,11 +150,17 @@ plt.close("all")
 fig, ax = plt.subplots(1, 2, figsize=(8, 4))
 ax[0].hist(scores[:, :, 0].flatten(), bins=10, density=True, histtype='step', color='r', rwidth=0.1, label='EV_quake')
 ax[0].hist(scores[:, :, 1].flatten(), bins=10, density=True, histtype='step', color='k', rwidth=0.1, label='EV_noise')
+###########################################################
+ax[0].hist(scores[:, :, 4].flatten(), bins=10, density=True, histtype='step', color='g', rwidth=0.1, label='EV_resquake')
+###########################################################
 ax[0].set_xlabel('explained variance', fontsize=14)
 ax[0].set_ylabel('density', fontsize=14)
 ax[0].legend(loc=2)
 ax[1].hist(scores[:, :, 2].flatten(), bins=10, density=True, histtype='step', color='r', rwidth=0.1, label='CC_quake')
 ax[1].hist(scores[:, :, 3].flatten(), bins=10, density=True, histtype='step', color='k', rwidth=0.1, label='CC_noise')
+###########################################################
+ax[1].hist(scores[:, :, 5].flatten(), bins=10, density=True, histtype='step', color='g', rwidth=0.1, label='CC_resquake')
+###########################################################
 ax[1].set_xlabel('cross-correlation coefficient', fontsize=14)
 ax[1].legend(loc=2)
 

@@ -510,13 +510,13 @@ class T_model(nn.Module):
         self.bn4 = nn.BatchNorm1d(8, dtype=torch.float64)
         self.enc5 = nn.Conv1d(8, 3, 9, stride=1, padding='same', dtype=torch.float64)
         self.bn5 = nn.BatchNorm1d(3, dtype=torch.float64)
-        self.fc6 = nn.Linear(1500, 600, dtype=torch.float64)
+        self.fc6 = nn.Linear(750, 600, dtype=torch.float64)
         self.bn6 = nn.BatchNorm1d(3, dtype=torch.float64)
 
         self.model = model
 
-        self.fc61 = nn.Linear(600, 1500, dtype=torch.float64)
-        self.fc62 = nn.Linear(600, 1500, dtype=torch.float64)
+        self.fc61 = nn.Linear(600, 750, dtype=torch.float64)
+        self.fc62 = nn.Linear(600, 750, dtype=torch.float64)
         self.bn61 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.bn62 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.dec51 = nn.ConvTranspose1d(3, 8, 9, stride=1, padding=4, output_padding=0, dtype=torch.float64)
@@ -584,13 +584,13 @@ class T_model_S(nn.Module):
         self.bn4 = nn.BatchNorm1d(8, dtype=torch.float64)
         self.enc5 = nn.Conv1d(8, 3, 9, stride=1, padding='same', dtype=torch.float64)
         self.bn5 = nn.BatchNorm1d(3, dtype=torch.float64)
-        self.fc6 = nn.Linear(3750, 600, dtype=torch.float64)
+        self.fc6 = nn.Linear(2500, 600, dtype=torch.float64)
         self.bn6 = nn.BatchNorm1d(3, dtype=torch.float64)
 
         self.model = model
 
-        self.fc61 = nn.Linear(600, 3750, dtype=torch.float64)
-        self.fc62 = nn.Linear(600, 3750, dtype=torch.float64)
+        self.fc61 = nn.Linear(600, 2500, dtype=torch.float64)
+        self.fc62 = nn.Linear(600, 2500, dtype=torch.float64)
         self.bn61 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.bn62 = nn.BatchNorm1d(3, dtype=torch.float64)
         self.dec51 = nn.ConvTranspose1d(3, 8, 9, stride=1, padding=4, output_padding=0, dtype=torch.float64)

@@ -4,12 +4,17 @@ Useful tools using pytorch
 @author: Jiuxun Yin
 Modified by Qibin Shi
 """
+import os
 import time
 import h5py
 import torch
 import numpy as np
+import torch.multiprocessing as mp
+import torch.distributed as dist
 from numpy.random import default_rng
 from torch.utils.data import Dataset
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 
 class WaveformDataset(Dataset):
     def __init__(self, X_train, Y_train):
@@ -323,9 +328,8 @@ def training_loop_branches(train_dataloader, validate_dataloader, model, loss_fn
 ### Qibin: add loss3 to measure the residual between the input and the sum of 2 outputs
 ### Qibin: force model.eval not to calculate gradient
 ### Qibin: data augmemtation on the fly
-def training_loop_branches_augmentation(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs
-                           , patience, device, minimum_epochs=None, npts=3000, pttp=10000):
-
+def training_loop_branches_augmentation(train_dataloader, validate_dataloader, model, loss_fn, optimizer, epochs,
+                                            patience, device, minimum_epochs=None, npts=3000, mid_pt=25000, strmax=6):
     # to track the average training loss per epoch as the model trains
     avg_train_losses = []
     avg_train_losses1 = []  # earthquake average loss with epoch
@@ -367,12 +371,11 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
             rng = default_rng(batch * epoch)
             rng_snr = default_rng(batch * epoch + 1)
             rng_sqz = default_rng(batch * epoch + 2)
-            # start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)  # for P-only
-            start_pt = rng.choice(npts - int(npts * 0.25), nbatch) + int(npts * 0.25)  # for S
-            snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
-            sqz = rng_sqz.choice(2, nbatch) + 1
-            pt1 = pttp - sqz * npts
-            pt2 = pttp + sqz * npts
+            start_pt = rng.choice(npts - int(npts * 0.2), nbatch) + int(npts * 0.1)
+            snr = 10 ** rng_snr.uniform(-0.3, 1, nbatch)
+            sqz = rng_sqz.choice(int(strmax), nbatch) + 1
+            pt1 = mid_pt - sqz * npts
+            pt2 = mid_pt + sqz * npts
 
             for i in np.arange(nbatch):
                 # %% squeeze earthquake signal
@@ -428,12 +431,11 @@ def training_loop_branches_augmentation(train_dataloader, validate_dataloader, m
                 rng = default_rng(batch * epoch)
                 rng_snr = default_rng(batch * epoch + 1)
                 rng_sqz = default_rng(batch * epoch + 2)
-                # start_pt = rng.choice(npts - int(npts * 0.05), nbatch) + int(npts * 0.05)  # for P-only
-                start_pt = rng.choice(npts - int(npts * 0.25), nbatch) + int(npts * 0.25)  # for S
-                snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
-                sqz = rng_sqz.choice(2, nbatch) + 1
-                pt1 = pttp - sqz * npts
-                pt2 = pttp + sqz * npts
+                start_pt = rng.choice(npts - int(npts * 0.2), nbatch) + int(npts * 0.1)
+                snr = 10 ** rng_snr.uniform(-0.3, 1, nbatch)
+                sqz = rng_sqz.choice(int(strmax), nbatch) + 1
+                pt1 = mid_pt - sqz * npts
+                pt2 = mid_pt + sqz * npts
 
                 for i in np.arange(nbatch):
                     # %% squeeze earthquake signal

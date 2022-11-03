@@ -26,16 +26,16 @@ matplotlib.rcParams.update({'font.size': 12})
 dt = 0.1
 # mid_pt = 25000  # mid-point of P window
 mid_pt = 20000  # mid-point of S window
-strmax = 6
+strmax = 4
 npts = 1500  # window length
-frac = 0.2  # smallest window start
+frac = 0.45  # smallest window start
 batch_size = 100
 gpu_num = 10
 devc = try_gpu(i=gpu_num)
 datadir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
-wave_preP = datadir + 'Alldepths_snr10_sample10_lpass4_S_TRZ.hdf5'
+wave_preP = datadir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
 model_name = "Branch_Encoder_Decoder_LSTM"
-model_dir = 'Release_Middle_augmentation_S4Hz_500s'
+model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
 fig_dir = model_dir + '/figures'
 mkdir(fig_dir)
 
@@ -67,8 +67,8 @@ test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
 # %% Model
 print(">_<Loading model ...")
-# model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth')
-model = torch.load('Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth')
+model = torch.load(model_dir + '/Branch_Encoder_Decoder_LSTM_Model.pth')
+# model = torch.load('Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth')
 model = model.module.to(devc)
 model.eval()
 
@@ -83,7 +83,7 @@ with torch.no_grad():
     rng_snr = default_rng(23)
     rng_sqz = default_rng(11)
     start_pt = rng.choice(npts - int(npts * frac * 2), nbatch) + int(npts * frac)
-    snr = 10 ** rng_snr.uniform(-1, 1, nbatch)
+    snr = 10 ** rng_snr.uniform(-0.3, 0.5, nbatch)
     sqz = rng_sqz.choice(strmax, nbatch) + 1
     pt1 = mid_pt - sqz * npts
     pt2 = mid_pt + sqz * npts
@@ -94,6 +94,7 @@ with torch.no_grad():
 
     for i in np.arange(nbatch):
         # %% squeeze earthquake signal
+        print(pt1[i],pt2[i],sqz[i])
         quak2[i] = X0[i, :, pt1[i]:pt2[i]:sqz[i]]
         # %% shift earthquake signal
         tmp = quak2[i, :, start_pt[i]:start_pt[i] + npts]

@@ -22,29 +22,29 @@ matplotlib.rcParams.update({'font.size': 24})
 devc = try_gpu(i=10)
 
 # %% data format
-snr = 1
+snr = 2
 dt = 0.1
 npts = 1500
 npts_trim = 1200
-start_pt = int(1500 - npts/2)
+start_pt = int(2500 - npts/2)
 
 # %% directories
-model_dir = 'Release_Middle_augmentation_P4Hz_150s'
+model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
 datadir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
-fig_dir = model_dir + '/Apply_releaseWDN_M5.5-8_deep100km_SNR' + str(snr) + '_azimuthBined'
+fig_dir = model_dir + '/Apply_releaseWDN_M5.5-8_deep100km_SNR' + str(snr) + '_azimuthBined_fixedWindow'
 mkdir(fig_dir)
 
 print("#" * 12 + " Loading quake waveforms " + "#" * 12)
 # %% Read data of M6
-csv_file = datadir + "metadata_M6_deep100km_allSNR_P.csv"
-wave_mat = datadir + 'M6_deep100km_allSNR_P.hdf5'
+csv_file = datadir + "metadata_M6_deep100km_allSNR_S_rot.csv"
+wave_mat = datadir + 'M6_deep100km_allSNR_S_rot.hdf5'
 with h5py.File(wave_mat, 'r') as f:
     X_train = f['pwave'][:, start_pt:start_pt+npts, :]
 meta_all = pd.read_csv(csv_file, low_memory=False)
 
 # %% Read data of M5
-csv_file = datadir + "metadata_M55_deep100km_allSNR_P.csv"
-wave_mat = datadir + 'M55_deep100km_allSNR_P.hdf5'
+csv_file = datadir + "metadata_M55_deep100km_allSNR_S_rot.csv"
+wave_mat = datadir + 'M55_deep100km_allSNR_S_rot.hdf5'
 with h5py.File(wave_mat, 'r') as f:
     X_train1 = f['pwave'][:, start_pt:start_pt+npts, :]
 meta_all1 = pd.read_csv(csv_file, low_memory=False)
@@ -64,8 +64,8 @@ model.eval()
 
 since = time.time()
 ################ Measure and plot in parallel #################
-partial_func = partial(denoise_cc_stack, meta_all=meta_all, X_train=X_train, model=model, fig_dir=fig_dir, dt=dt, npts=npts, npts_trim=npts_trim, normalized_stack=True, min_snr=snr)
-num_proc = min(os.cpu_count(), 5)
+partial_func = partial(denoise_cc_stack, meta_all=meta_all, X_train=X_train, model=model, fig_dir=fig_dir, dt=dt, npts=npts, npts_trim=npts_trim, normalized_stack=True, min_snr=snr, cmp=0, tstar=1.2)
+num_proc = min(os.cpu_count(), 1)
 print('---- %d threads for plotting %d record sections\n' % (num_proc, len(evids)))
 with Pool(processes=num_proc) as pool:
     result = pool.map(partial_func, evids)

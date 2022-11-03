@@ -40,8 +40,8 @@ def model_spec(logspec, f_mod, dn=0.1, df=0.01):
 minsta = 10
 since = time.time()
 # %% Read the file of event durations
-model_dir = 'Release_Middle_augmentation_S4Hz_150s'
-fig_dir = model_dir + '/Apply_releaseWDN_M5.5-8_deep100km_SNR2_azimuthBined'
+model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
+fig_dir = model_dir + '/Apply_releaseWDN_M5.5-8_deep100km_SNR2_azimuthBined_fixedWindow'
 csv_file = fig_dir + '/source_measurements.csv'
 meta_result = pd.read_csv(csv_file, low_memory=False)
 

@@ -1,5 +1,5 @@
 """
-Save clean earthquake signal with STEAD noise
+Pair quake signals to customized noises
 
 @author: Qibin Shi (qibins@uw.edu)
 """
@@ -38,7 +38,7 @@ tr.resample(sample_rate)
 tr.merge(fill_value=np.nan)
 tr = trim_align(tr)
 dt = tr[0].stats.delta
-npts = tr[0].stats.npts-1
+npts = tr[0].stats.quake_len - 1
 waveform0 = np.zeros((npts, 3))
 for i in range(3):
     waveform0[:, i] = np.array(tr[i].data)[0:npts]

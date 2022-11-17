@@ -101,7 +101,7 @@ noise_all = np.append(noise_all, noise_all, axis=0)
 ############## %% Save together with earthquake waveforms
 print('--- Reading quake waveform, it is quick')
 with h5py.File(cleanwave_mat, 'r') as f:
-    wv = f['pwave'][:]
+    wv = f['quake'][:]
 X_sum = np.sum(np.square(wv), axis=1)
 indX = np.where(X_sum == 0)[0]
 wv = np.delete(wv, indX, 0)
@@ -120,7 +120,7 @@ for i in range(N_traces):
 
 print(f'----- Saving ...')
 with h5py.File(model_dataset, 'w') as f:
-    f.create_dataset("pwave", data=quake_waves)
+    f.create_dataset("quake", data=quake_waves)
     f.create_dataset("noise", data=noise_waves)
 
 print('Done!')

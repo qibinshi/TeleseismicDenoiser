@@ -10,6 +10,7 @@ import torch
 import random
 import argparse
 import numpy as np
+import torch.nn as nn
 from matplotlib import pyplot as plt
 from numpy.random import default_rng
 from torch.utils.data import DataLoader
@@ -24,41 +25,42 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--phase', default='P', type=str, help='earthquake phase')
     parser.add_argument('-g', '--gpu', default=0, type=int, help='main gpu: 0-3/ no gpu: 9')
-    parser.add_argument('-T', '--transfer', default=True, type=int, help='transfer learning')
+    parser.add_argument('-T', '--transfer', default=1, type=int, help='transfer learning')
     args = parser.parse_args()
 
+    data_dir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
     phase = args.phase
     if phase == 'P':
         mid_pt = 25000
         npts = 1500
         strmax = 6
+        model_dir = 'Release_Middle_augmentation_P4Hz_150s'
+        wave_raw = data_dir + 'Alldepths_snr25_2000_21_sample10_lpass4_P_preP_MP_both_BH_HH.hdf5'
     else:
         mid_pt = 20000
         npts = 1500
         strmax = 4
+        model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
+        wave_raw = data_dir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
 
+    progress_file = model_dir + '/Running_progress.txt'
+    mkdir(model_dir)
     frac = 0.1  # starting fraction not included in shifting window
     weighted_loss = False
-    devc = try_gpu(i=args.gpu)
     bottleneck_name = 'LSTM'
-    model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
     model_structure = "Branch_Encoder_Decoder"
-    progress_file = model_dir + '/Running_progress.txt'
     model_name = model_structure + "_" + bottleneck_name
-    datadir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
-    wave_preP = datadir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
-    mkdir(model_dir)
 
     # %% Read the pre-processed datasets
     print("#" * 12 + " Loading quake signals and pre-P noises " + "#" * 12)
-    with h5py.File(wave_preP, 'r') as f:
-        X_train = f['pwave'][:]
+    with h5py.File(wave_raw, 'r') as f:
+        X_train = f['quake'][:]
         Y_train = f['noise'][:, (0 - npts):, :]
 
     X_sum = np.sum(np.square(X_train), axis=1)
-    indX = np.where(X_sum == 0)[0]
-    X_train = np.delete(X_train, indX, 0)
-    Y_train = np.delete(Y_train, indX, 0)
+    ind_X = np.where(X_sum == 0)[0]
+    X_train = np.delete(X_train, ind_X, 0)
+    Y_train = np.delete(Y_train, ind_X, 0)
 
     print("#" * 12 + " Normalizing signal and noises " + "#" * 12)
     X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)
@@ -69,15 +71,19 @@ def main():
     test_size = 0.5  # (1-80%) x 50%
     rand_seed1 = 43
     rand_seed2 = 11
-    X_training,X_test,Y_training,Y_test=train_test_split(X_train,Y_train,train_size=train_size,random_state=rand_seed1)
-    X_validate,X_test,Y_validate,Y_test=train_test_split(X_test, Y_test,  test_size=test_size, random_state=rand_seed2)
+    X_training, X_test, Y_training, Y_test = train_test_split(X_train, Y_train,
+                                                              train_size=train_size,
+                                                              random_state=rand_seed1)
+    X_validate, X_test, Y_validate, Y_test = train_test_split(X_test, Y_test,
+                                                              test_size=test_size,
+                                                              random_state=rand_seed2)
 
     # %% Convert to torch class. Or WaveformDataset_h5 for limited memory
     training_data = WaveformDataset(X_training, Y_training)
     validate_data = WaveformDataset(X_validate, Y_validate)
     test_data = WaveformDataset(X_test, Y_test)
 
-    # %% Give a fixed seed for model initialization
+    # %% Fix seed for model initialization
     random.seed(0)
     np.random.seed(20)
     torch.manual_seed(99)
@@ -85,21 +91,26 @@ def main():
 
     # %% Neural Net structure
     print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
+    devc = try_gpu(i=args.gpu)
+    if args.transfer:
+        # %% transfer learning
+        trans_mod = 'Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth'
+        model = torch.load(trans_mod, map_location=devc)
+    else:
+        model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth',
+                           map_location=devc)
 
-    # model = torch.load('Model_and_datasets_1D_all_snr_40' + f'/{model_name}/{model_name}_Model.pth', map_location=devc)
-    # %% transfer learn P model
-    model = torch.load('Release_Middle_augmentation_P4Hz_150s/Branch_Encoder_Decoder_LSTM_Model.pth', map_location=devc)
+        # for param in model.parameters():
+        #     param.requires_grad = False
 
-    # for param in model.parameters():
-    #     param.requires_grad = False
+        # %% Data parallelism for multiple GPUs,
+        # %! model=model.module.to(device) for application on CPU
+        model = T_model(model)
+        model = T_model_S(model)
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            model = nn.DataParallel(model, device_ids=[0, 1, 2, 3])
 
-    # %% Data parallelism for multiple GPUs,
-    # %! model=model.module.to(device) for application on CPU
-    # model = T_model(model)
-    # model = T_model_S(model)
-    # if torch.cuda.device_count() > 1:
-    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
-    #     model = nn.DataParallel(model, device_ids=[0, 1, 2, 3])
     model.to(devc)
 
     n_para = 0
@@ -123,12 +134,18 @@ def main():
     # %% Loop for training
     print("#" * 12 + " training model " + model_name + " " + "#" * 12)
 
-    model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches_augmentation(train_iter, validate_iter,
-                                                                                     model, loss_fn, optimizer,
-                                                                                     epochs=epochs, patience=patience,
-                                                                                     device=devc,
-                                                                                     minimum_epochs=minimum_epochs,
-                                                                                     npts=npts, mid_pt=mid_pt, strmax=strmax)
+    model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches_augmentation(train_iter,
+                                                                                                  validate_iter,
+                                                                                                  model,
+                                                                                                  loss_fn,
+                                                                                                  optimizer,
+                                                                                                  epochs=epochs,
+                                                                                                patience=patience,
+                                                                                                  device=devc,
+                                                                                          minimum_epochs=minimum_epochs,
+                                                                                                    npts=npts,
+                                                                                                  mid_pt=mid_pt,
+                                                                                                  strmax=strmax)
     print("Training is done!")
     write_progress(progress_file, text_contents="Training is done!" + '\n')
 

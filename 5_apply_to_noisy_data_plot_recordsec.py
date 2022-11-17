@@ -65,7 +65,7 @@ model.eval()
 since = time.time()
 ################ Measure and plot in parallel #################
 partial_func = partial(denoise_cc_stack, meta_all=meta_all, X_train=X_train, model=model, fig_dir=fig_dir, dt=dt, npts=npts, npts_trim=npts_trim, normalized_stack=True, min_snr=snr, cmp=0, tstar=1.2)
-num_proc = min(os.cpu_count(), 1)
+num_proc = min(os.cpu_count(), 10)
 print('---- %d threads for plotting %d record sections\n' % (num_proc, len(evids)))
 with Pool(processes=num_proc) as pool:
     result = pool.map(partial_func, evids)

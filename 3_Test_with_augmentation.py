@@ -46,9 +46,9 @@ def main():
     batch_size = 100
     devc = try_gpu(i=args.gpu)
     model_name = "Branch_Encoder_Decoder_LSTM"
-    model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
+    model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25_1980_2021'
     data_dir = '/fd1/QibinShi_data/matfiles_for_denoiser/'
-    wave_raw = data_dir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
+    wave_raw = data_dir + 'Ssnr25_lp4_1980-2021.hdf5'
     fig_dir = model_dir + '/figures'
     mkdir(fig_dir)
 

@@ -40,8 +40,9 @@ def main():
         mid_pt = 20000
         npts = 1500
         strmax = 4
-        model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25'
-        wave_raw = data_dir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
+        model_dir = 'Release_Middle_augmentation_S4Hz_150s_removeCoda_SoverCoda25_1980_2021'
+        wave_raw = data_dir + 'Ssnr25_lp4_1980-2021.hdf5'
+        # wave_raw = data_dir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5'
 
     progress_file = model_dir + '/Running_progress.txt'
     mkdir(model_dir)
@@ -57,10 +58,13 @@ def main():
         X_train = f['quake'][:]
         Y_train = f['noise'][:, (0 - npts):, :]
 
-    X_sum = np.sum(np.square(X_train), axis=1)
-    ind_X = np.where(X_sum == 0)[0]
+    X_sum = np.sum(np.sum(np.square(X_train), axis=1), axis=1)
+    ind_X = np.where(X_sum == np.nan)[0]
     X_train = np.delete(X_train, ind_X, 0)
     Y_train = np.delete(Y_train, ind_X, 0)
+    print(len(X_train), len(Y_train), ind_X, X_sum.shape)
+
+    print(Y_train[4575:])
 
     print("#" * 12 + " Normalizing signal and noises " + "#" * 12)
     X_train = (X_train - np.mean(X_train, axis=1, keepdims=True)) / (np.std(X_train, axis=1, keepdims=True) + 1e-12)

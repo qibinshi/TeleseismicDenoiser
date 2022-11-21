@@ -28,7 +28,7 @@ def main():
     parser.add_argument('-n', '--threads', default=24, type=int, help='number of processes')
     args = parser.parse_args()
     # %% Directories of raw and reformatted data
-    data_dir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M6.0plus/2000-2021/'
+    data_dir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M6.0plus/1980-1999/'
     save_dir = '/data/whd01/qibin_data/raw_data_for_DenoTe/M6.0plus/matfiles_for_denoiser/'
 
     # %% Quake catalog from xml files
@@ -105,16 +105,23 @@ def main():
         q3 = f['quake'][:]
         n3 = f['noise'][:]
 
+    with h5py.File(save_dir + 'Alldepths_SoverCoda25_sample10_lpass4_S_TRZ.hdf5', 'r') as f:
+        q0 = f['pwave'][:]
+        n0 = f['noise'][:]
+
+    q1 = np.append(q0, q1, axis=0)
+    n1 = np.append(n0, n1, axis=0)
+
     q1 = np.append(q1, q2, axis=0)
-    q1 = np.append(q1, q3, axis=0)
     n1 = np.append(n1, n2, axis=0)
+    q1 = np.append(q1, q3, axis=0)
     n1 = np.append(n1, n3, axis=0)
 
-    with h5py.File(save_dir + phase + 'snr' + minsnr + '_lp4_' + '.hdf5', 'w') as f:
+    with h5py.File(save_dir + phase + 'snr' + str(minsnr) + '_lp4_' + '1980-2021.hdf5', 'w') as f:
         f.create_dataset("quake", data=q1)
         f.create_dataset("noise", data=n1)
 
-    meta.to_csv(save_dir + phase + 'snr' + minsnr + '_lp4_' + '.csv', sep=',', index=False)
+    meta.to_csv(save_dir + phase + 'snr' + str(minsnr) + '_lp4_' + '1980.csv', sep=',', index=False)
     print("Total traces of data:", all_quake.shape[0])
     print("All is saved! Time elapsed: %.2f s" % (time.time() - since))
 
@@ -136,7 +143,8 @@ def one_quake_noise(ev, directory=None, npts=50000, noise_saved_pts=10000, phase
     all_noise = np.zeros((0, noise_saved_pts, 3), dtype=np.double)
     one_quake = np.zeros((npts, 3), dtype=np.double)
     one_noise = np.zeros((noise_saved_pts, 3), dtype=np.double)
-    pre_noise = np.zeros((noise_saved_pts, 3), dtype=np.double)
+    pre_noise = np.zeros((noise_saved_pts * 2, 3), dtype=np.double)
+    coda_noise = np.zeros((noise_saved_pts, 3), dtype=np.double)
 
     evnm = str(ev.resource_id)[13:]
     evlo = ev.origins[0].longitude
@@ -202,8 +210,8 @@ def one_quake_noise(ev, directory=None, npts=50000, noise_saved_pts=10000, phase
                         amplitude_median = np.nanmedian(amplitude_series)
                         noise0 = pre_noise[amplitude_series < (4 * amplitude_median), :]
                     else:
-                        pre_noise[:, i] = np.array(st[i].data)[noise_pts - noise_saved_pts:noise_pts]
-                        noise0 = pre_noise
+                        coda_noise[:, i] = np.array(st[i].data)[noise_pts - noise_saved_pts:noise_pts]
+                        noise0 = coda_noise
 
                 # %% make sure noise is long enough
                 if noise0.shape[0] >= noise_saved_pts:

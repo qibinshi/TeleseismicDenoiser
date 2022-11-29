@@ -1,7 +1,7 @@
 # Teleseismic Denoiser
 
-Splitting earthquake and noise waveforms using a two-branch U net trained with global teleseismic data.
-The neural network includes the pretrained [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) for the higher level feature learning.
+Separate earthquake signals and noises on teleseismic waveform recordings using a two-branch U-net trained with global teleseismic data.
+The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) to learn high-level features.
 
 ## Prerequisite: Anaconda environment.
 ```

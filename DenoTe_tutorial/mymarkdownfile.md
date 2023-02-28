@@ -6,10 +6,9 @@ ML is able to separate signals and noises.
 ## 1st Section
 
 You can [refer to the intro](intro.md).
-The reference to [](Sec-lbl).
 
-(Sec-lbl)=
+
 ## 2st Section
 
 You can [refer to the intro](intro.md).
-The reference to [](Sec-lbl).
+The reference to [last section](Sec-lbl).

@@ -1,6 +1,6 @@
-# Qibin's sample text
+# Test the model
 
-ML is able to separate signals and noises.
+Use a portion of testing dataset to the denoiser. See how signal and noises are separated.
 
 (Sec-lbl)=
 ## 1st Section

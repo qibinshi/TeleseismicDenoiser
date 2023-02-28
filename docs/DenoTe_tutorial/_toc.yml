@@ -6,5 +6,6 @@ root: intro
 chapters:
 - file: markdown
 - file: notebooks
+- file: denoise
 - file: markdown-notebooks
 - file: mymarkdownfile

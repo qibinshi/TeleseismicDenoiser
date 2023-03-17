@@ -159,8 +159,6 @@ def one_quake_noise(ev, directory=None, npts=50000, noise_saved_pts=10000, noise
     return allpwave, allnoise, meta
 
 
-# Process each event for only signal.
-# This is to prepare big training data.
 def one_quake(ev, directory=None, halftime=None, freq=4, rate=10, maxsnr=100000, mindep=100, phase=1, cmp=0):
     # initialize the metadata
     meta = pd.DataFrame(columns=[
@@ -803,17 +801,17 @@ def shift2maxcc(wave1, wave2, correction=0, maxshift=500, flip_thre=-0.3):
 
     flipsign = 0
 
-    if 0 - corr[ind1] > corr[ind2] and corr[ind2] < flip_thre:
+    if 0 - corr[ind1] - 0.1 > corr[ind2] and corr[ind2] < flip_thre:
         ind1 = ind2
         wave2 = 0 - wave2
         flipsign = 1
-    elif corr[ind1] < 0.3:
+    elif corr[ind1] < 0.3:  # if not flipped and low CC
         ind1 = len(wave2) + correction
 
     return wave2, lags[ind1], flipsign
 
 
-def dura_cc(wave1, wave2, time, maxshift=30, max_ratio=2, flip_thre=-0.3):
+def dura_cc(wave1, wave2, time, maxshift=30, max_ratio=2, flip_thre=-0.8):
 
     interp_f = interp1d(time, wave2, bounds_error=False, fill_value=0.)
     n1 = np.sum(np.square(wave1))
@@ -839,7 +837,7 @@ def dura_cc(wave1, wave2, time, maxshift=30, max_ratio=2, flip_thre=-0.3):
         cc_max = np.nanmax(corr[st_pt: en_pt])
         cc_min = np.nanmin(corr[st_pt: en_pt])
 
-        if 0 - cc_max > cc_min and cc_min < flip_thre:
+        if 0 - cc_max - 0.1 > cc_min and cc_min < flip_thre:
             cc_best = 0 - cc_min
         else:
             cc_best = cc_max
@@ -895,6 +893,87 @@ def ellipse_directivity(azimuth, ratio, wgt, k1_itv=0.002, k2_itv=0.1, k3_itv=5.
                     med0 = med
                     dir0 = dir
     return vr0, med0, dir0
+
+
+def directivity3d(azimuth, takeoff, ratio, strike, dip, wgt, dv=0.01, dphi=5.0, dcorrect=0.1):
+    range1 = np.arange(0.0, 1.0, dv, dtype=np.float64)
+    range2 = np.arange(0.0, 360.0, dphi, dtype=np.float64)
+    range3 = np.arange(0.6, 1.5, dcorrect, dtype=np.float64)
+    err_min = 1000
+    vr0 = 0.0
+    dir0 = 0.0
+    inc0 = 0.0
+    dura_correct0 = 1.0
+
+    dip = dip / 180.0 * np.pi
+    plunge = (strike + 90.0) / 180.0 * np.pi
+    inc_ray = np.pi / 2.0 - takeoff
+
+    for vr in range1:
+        for dir in range2:
+            for dura_correct in range3:
+
+                ## calculate the inclination
+                phi = dir / 180.0 * np.pi - plunge
+                inc2sin = np.square(np.sin(dip)) / (1.0 + np.square(np.cos(dip) * np.tan(phi)))
+                inc2cos = 1.0 - inc2sin
+                inc1cos = np.sqrt(inc2cos)
+                if np.fabs(phi) < np.pi / 2.0:
+                    inc1sin = np.sqrt(inc2sin)
+                else:
+                    inc1sin = 0.0 - np.sqrt(inc2sin)
+
+                ## angle between ray and directivity
+                cos_theta = inc1sin * np.sin(inc_ray) + inc1cos * np.cos(inc_ray) * np.cos((azimuth - dir) / 180.0 * np.pi)
+
+                misfit = 1.0 - vr * cos_theta - dura_correct / ratio
+                mse = np.mean(np.square(np.multiply(misfit, wgt)))
+                mae = np.mean(np.fabs(np.multiply(misfit, wgt)))
+                if mse + mae * mae < err_min:
+                    err_min = mse + mae * mae
+                    vr0 = vr
+                    dir0 = dir
+                    inc0 = np.arcsin(inc1sin) * 180.0 / np.pi
+                    dura_correct0 = dura_correct
+
+    return vr0, dir0, inc0, dura_correct0
+
+
+def directivity3d_free(azimuth, takeoff, ratio, wgt, dv=0.01, dphi=5.0, dcorrect=0.1):
+    range1 = np.arange(0.0, 1.0, dv, dtype=np.float64)
+    range2 = np.arange(0.0, 360.0, dphi, dtype=np.float64)
+    range3 = np.arange(0.6, 1.4, dcorrect, dtype=np.float64)
+    range4 = np.arange(-90, 90, dphi, dtype=np.float64)
+    err_min = 1000
+    vr0 = 0.0
+    dir0 = 0.0
+    inc0 = 0.0
+    dura_correct0 = 1.0
+
+    inc_ray = np.pi / 2.0 - takeoff
+
+    for vr in range1:
+        for dir in range2:
+            for inc in range4:
+                for dura_correct in range3:
+
+                    inc1sin = np.sin(inc/180.0 * np.pi)
+                    inc1cos = np.cos(inc / 180.0 * np.pi)
+                    ## angle between ray and directivity
+                    cos_theta = inc1sin * np.sin(inc_ray) + inc1cos * np.cos(inc_ray) * np.cos((azimuth - dir) / 180.0 * np.pi)
+
+                    misfit = 1.0 - vr * cos_theta - dura_correct / ratio
+                    mse = np.mean(np.square(np.multiply(misfit, wgt)))
+                    mae = np.mean(np.fabs(np.multiply(misfit, wgt)))
+                    if mse + mae * mae < err_min:
+                        err_min = mse + mae * mae
+                        vr0 = vr
+                        dir0 = dir
+                        inc0 = inc
+                        dura_correct0 = dura_correct
+
+    return vr0, dir0, inc0, dura_correct0
+
 
 def p_rad_pat(strike, dip, rake, takeoff, azimuth):
     strike = strike / 180.0 * np.pi
@@ -958,7 +1037,7 @@ def fit_spec(freq, spec, dn=0.1, df=0.01):
     l2_min = 10000.0
     n_best = 2
     fc_best = -2
-    for n in np.arange(0.0, 3.0, dn, dtype=np.float64):
+    for n in np.arange(0.0, 2.5, dn, dtype=np.float64):
         for fc in np.arange(-3.0, 0.4, df, dtype=np.float64):
             model_func = 1.0 / (1.0 + 10**((f-fc)*n))
             l2 = np.sum(np.square(log_spec_new - np.log10(model_func)))
@@ -971,13 +1050,14 @@ def fit_spec(freq, spec, dn=0.1, df=0.01):
 
 
 def flux_int(freq, spec, fc, n):
-    model = 1.0 / (1.0 + (freq[freq > 1] / fc) ** n)
-    int1 = trapezoid(np.square(freq[freq < 1] * spec[freq < 1]), freq[freq < 1], axis=-1)
-    int2 = trapezoid(np.square(freq[freq > 1] * model),          freq[freq > 1], axis=-1)
+    f_change = 1
+    model = 1.0 / (1.0 + (freq[freq > f_change] / fc) ** n)
+    int1 = trapezoid(np.square(freq[freq < f_change] * spec[freq < f_change]), freq[freq < 1], axis=-1)
+    int2 = trapezoid(np.square(freq[freq > f_change] * model),          freq[freq > 1], axis=-1)
 
     density = 3e3
     vp = 5e3
-    const = np.pi**2 * 8 / (vp**5 * 15 * density)
+    const = np.pi**2 * 8 / (vp**5 * density * 15)
 
     return (int1+int2)*const
 
@@ -991,14 +1071,13 @@ def mkdir(dir_path):
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
 
-def get_vp_vs(depth):
+def get_vp_vs(depth, vmodel='PREM.txt'):
     #
-    # table = np.loadtxt('IASP91.txt')
-    table = np.loadtxt('PREM.txt')
+    table = np.loadtxt(vmodel)
     deps = table[:, 0]
-    vps = table[deps < depth, 2]
-    vss = table[deps < depth, 3]
-    den = table[deps < depth, 4]
+    vps = table[deps < depth, 1]
+    vss = table[deps < depth, 2]
+    den = table[deps < depth, 3]
 
     return vps[-1], vss[-1], den[-1]
 

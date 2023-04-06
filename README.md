@@ -4,7 +4,7 @@ Separate earthquake signals and noises on teleseismic waveform recordings using 
 The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) to learn high-level features.
 
 ## 0. Configuration file
-Download/copy `tests/config.ini` to your work directory. Modified the paths to match your computer.
+Download/copy `tests/config.ini` to your work directory. Modify the paths to match your computer.
 
 ## 1. Quick run
 

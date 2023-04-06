@@ -13,6 +13,8 @@ pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
 ```
 
 ### Use command line executable to test the package
+Modify the paths in `config.ini` that has been saved in your work directory. In the same directory, run the executables for quick tests.
+
 To train the model with demo data
 ```
 denote_train

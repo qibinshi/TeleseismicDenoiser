@@ -29,8 +29,23 @@ denote_predict
 ```
 
 ## 2. Prepare your own data
+We use H5py for waveform data. The training data is in H5py format with two keys for the quake and noise signals respectively. The noisy input data for application is in H5py with a signal key.
 
-## 3. Download the source code and install all the dependencies
+### Training data:
+Key 'quake': Create an numpy array with shape of (X, 50000, 3). It represent X recordings of 3-component earthquake waveforms, of which each trace has 50,000 sampling points. Our default sampling rate is 10 Hz.
+
+Key 'noise': Create an numpy array with shape of (X, 10000, 3). It represent X recordings of 3-component noise waveforms preceding the P arrival, where each trace has 10,000 points.
+
+The names of keys can vary, with `config.ini` modified accordingly
+
+The code split the training data into train, validate and test sets. The executables `denote_train` and `denote_test` are both run with the training data.
+
+### Noisy application data
+Key 'quake': Create an numpy array with shape of (X, 3000, 3). It represent X recordings of 3-component earthquake waveforms, of which each trace has 3,000 sampling points. Our default sampling rate is 10 Hz. Hence the length of each waveform is 300 seconds.
+
+
+
+## (Optional) Download the source code and install all the dependencies
 ### Prerequisite: Anaconda environment.
 ```
 conda create -n myenv python=3.9

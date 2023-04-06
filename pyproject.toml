@@ -151,7 +151,7 @@ denote_predict = "denote.denote:predict"
 [tool.setuptools]
 # If there are data files included in your packages that need to be
 # installed, specify them here.
-package-data = {qshiproj = ["pretrained_models/*.pth", "datasets/*"]}
+package-data = {denote = ["pretrained_models/*.pth", "datasets/*"]}
 
 [build-system]
 # These are the assumed default build requirements from pip:

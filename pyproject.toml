@@ -3,26 +3,26 @@
 # package, this name will be registered for you. It will determine how
 # users can install this project, e.g.:
 #
-# $ pip install sampleproject
+# $ pip install denote
 #
 # And where it will live on PyPI: https://pypi.org/project/sampleproject/
 #
 # There are some restrictions on what makes a valid project name
 # specification here:
 # https://packaging.python.org/specifications/core-metadata/#name
-name = "qshiproject"  # Required
+name = "denote"  # Required
 
 # Versions should comply with PEP 440:
 # https://www.python.org/dev/peps/pep-0440/
 #
 # For a discussion on single-sourcing the version, see
 # https://packaging.python.org/guides/single-sourcing-package-version/
-version = "0.0.2"  # Required
+version = "0.0.1"  # Required
 
 # This is a one-line description or tagline of what your project does. This
 # corresponds to the "Summary" metadata field:
 # https://packaging.python.org/specifications/core-metadata/#summary
-description = "test project"  # Optional
+description = "ML denoising for teleseismic waveforms"  # Optional
 
 # This is an optional longer description of your project that represents
 # the body of text which users will see when they visit PyPI.
@@ -43,7 +43,7 @@ requires-python = ">=3.7"
 # This is either text indicating the license for the distribution, or a file
 # that contains the license
 # https://packaging.python.org/en/latest/specifications/core-metadata/#license
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE"}
 
 # This field adds keywords for your project which will appear on the
 # project page. What does your project relate to?
@@ -51,20 +51,20 @@ license = {file = "LICENSE.txt"}
 # Note that this is a list of additional keywords, separated
 # by commas, to be used to assist searching for the distribution in a
 # larger catalog.
-keywords = ["seismic", "auto-encoder"]  # Optional
+keywords = ["denoising", "auto-encoder"]  # Optional
 
 # This should be your name or the name of the organization who originally
 # authored the project, and a valid email address corresponding to the name
 # listed.
 authors = [
-  {name = "Q. Shi", email = "qshi@mygmail.com" } # Optional
+  {name = "Qibin Shi", email = "qibins@uw.edu" } # Optional
 ]
 
 # This should be your name or the names of the organization who currently
 # maintains the project, and a valid email address corresponding to the name
 # listed.
 maintainers = [
-  {name = "A. Great Maintainer", email = "maintainer@example.com" } # Optional
+  {name = "Marine Denolle", email = "mdenolle@uw.edu" } # Optional
 ]
 
 # Classifiers help users find your project by categorizing it.
@@ -103,7 +103,13 @@ classifiers = [  # Optional
 # For an analysis of this field vs pip's requirements files see:
 # https://packaging.python.org/discussions/install-requires-vs-requirements/
 dependencies = [ # Optional
-  "peppercorn"
+	"h5py",
+	"torch",
+	"scipy",
+	"obspy",
+	"scikit-learn",
+	"pandas",
+	"multitaper"
 ]
 
 # List additional groups of dependencies here (e.g. development
@@ -129,23 +135,23 @@ test = ["coverage"]
 # maintainers, and where to support the project financially. The key is
 # what's used to render the link text on PyPI.
 [project.urls]  # Optional
-"Homepage" = "https://github.com/pypa/sampleproject"
-"Bug Reports" = "https://github.com/pypa/sampleproject/issues"
-"Funding" = "https://donate.pypi.org"
-"Say Thanks!" = "http://saythanks.io/to/example"
-"Source" = "https://github.com/pypa/sampleproject/"
+"Homepage" = "https://github.com/qibinshi/TeleseismicDenoiser"
+"Bug Reports" = "https://github.com/qibinshi/TeleseismicDenoiser/issues"
 
 # The following would provide a command line executable called `sample`
 # which executes the function `main` from this package when invoked.
 [project.scripts]  # Optional
-sample = "sample:main"
+denote_train = "denote.denote:train"
+denote_test = "denote.denote:test"
+denote_predict = "denote.denote:predict"
+
 
 # This is configuration specific to the `setuptools` build backend.
 # If you are using a different build backend, you will need to change this.
 [tool.setuptools]
 # If there are data files included in your packages that need to be
 # installed, specify them here.
-package-data = {"sample" = ["*.dat"]}
+package-data = {qshiproj = ["pretrained_models/*.pth", "datasets/*"]}
 
 [build-system]
 # These are the assumed default build requirements from pip:

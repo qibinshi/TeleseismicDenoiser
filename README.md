@@ -8,7 +8,7 @@ Download/copy `tests/config.ini` to your work directory. Modified the paths to m
 
 ## 1. Quick run
 
-You can quickly install and run the code with the demo datasets and pretrained models in the package. 
+You can quickly install and run the code with the `demo datasets` and `pretrained models` in the package. 
 
 ### Use pip3 to install code
 ```

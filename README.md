@@ -4,7 +4,11 @@ Separate earthquake signals and noises on teleseismic waveform recordings using 
 The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) to learn high-level features.
 
 ## 0. Configuration file
-Download/copy `tests/config.ini` to your work directory. Modified the paths to match your computer.
+Download/copy `tests/config.ini` to your work directory. 
+
+It allows you to manage the directories, data shape, model size and training strategies. 
+
+Modified the paths on the [directories] section to match your computer.
 
 ## 1. Quick run
 
@@ -42,7 +46,7 @@ Key 'quake': Create an numpy array with shape of (X, 50000, 3). It represent X r
 
 Key 'noise': Create an numpy array with shape of (X, 10000, 3). It represent X recordings of 3-component noise waveforms preceding the P arrival, where each trace has 10,000 points.
 
-The names of keys can vary, with `config.ini` modified accordingly
+The names of keys can vary, with `config.ini` modified accordingly.
 
 The code split the training data into train, validate and test sets. The executables `denote_train` and `denote_test` are both run with the training data.
 

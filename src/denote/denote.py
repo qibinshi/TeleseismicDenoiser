@@ -117,7 +117,7 @@ def train(configure_file='config.ini'):
 
     if transfer:
         # %% keep constructing for DenoTe
-        model = T_model(model, half_insize=int(npts / 2))
+        model = T_model(model)
 
         # %% load pre-trained weights for DenoTe
         if torch.cuda.device_count() > gpu:

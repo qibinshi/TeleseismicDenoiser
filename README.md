@@ -7,6 +7,8 @@ The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://
 Download/copy `tests/config.ini` to your work directory. Modified the paths to match your computer.
 
 ## 1. Quick run
+You can quickly install and run the code with the demo datasets and pretrained models in the package. 
+
 ### Use pip3 to install code
 ```
 pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
@@ -31,7 +33,10 @@ denote_predict
 ## 2. Prepare your own data
 We use H5py for waveform data. The training data is in H5py format with two keys for the quake and noise signals respectively. The noisy input data for application is in H5py with a signal key.
 
+Our big training and application datasets can be downloaded with the link provided below.
+
 ### Training data:
+(link to training data)
 Key 'quake': Create an numpy array with shape of (X, 50000, 3). It represent X recordings of 3-component earthquake waveforms, of which each trace has 50,000 sampling points. Our default sampling rate is 10 Hz.
 
 Key 'noise': Create an numpy array with shape of (X, 10000, 3). It represent X recordings of 3-component noise waveforms preceding the P arrival, where each trace has 10,000 points.
@@ -41,6 +46,7 @@ The names of keys can vary, with `config.ini` modified accordingly
 The code split the training data into train, validate and test sets. The executables `denote_train` and `denote_test` are both run with the training data.
 
 ### Noisy application data
+(link to application data)
 Key 'quake': Create an numpy array with shape of (X, 3000, 3). It represent X recordings of 3-component earthquake waveforms, of which each trace has 3,000 sampling points. Our default sampling rate is 10 Hz. Hence the length of each waveform is 300 seconds.
 
 

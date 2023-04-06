@@ -3,12 +3,38 @@
 Separate earthquake signals and noises on teleseismic waveform recordings using a two-branch U-net trained with global teleseismic data.
 The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) to learn high-level features.
 
-## Prerequisite: Anaconda environment.
+## 0. Configuration file
+Download/copy `config.ini` to your work directory. Modified the paths to match your computer.
+
+## 1. Quick run
+### Use pip3 to install code
+```
+pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
+```
+
+### Use command line executable to test the package
+To train the model with demo data
+```
+denote_train
+```
+To test the pretrained model with demo data
+```
+denote_test
+```
+To predict from the example noisy input
+```
+denote_predict
+```
+
+## 2. Prepare your own data
+
+## 3. Download the source code and install all the dependencies
+### Prerequisite: Anaconda environment.
 ```
 conda create -n myenv python=3.9
 conda activate myenv
 ```
-## Prerequisite: Essential modules in the recommended order.
+### Prerequisite: Essential modules in the recommended order.
 ```
 conda install h5py
 conda install pytorch -c pytorch
@@ -17,21 +43,5 @@ conda install obspy -c conda-forge
 conda install scikit-learn
 conda install pandas
 conda install -c gprieto multitaper / pip install multitaper
-```
-## Step 0-1: Generate earthquake and noise waveforms.
-Process the event-based waveform and save both P/S wave and pre-P wave signals.
-```
-0_quake_plus_prePnoise.py
-```
-
-
-## Step 2-3: Train and test the model with data augmentation.
-Training with stacked noisy earthquake waveform in order to obtain the denoised earthquake waveform and pure noise. Data is being augmented on the fly by squeezing and shifting P/S waves and stacking noises with variable SNR.
-```
-2_Train_with_augmentation.py
-```
-Evaluate the performance of the global earthquake denoiser on the testing data.
-```
-3_Test_with_augmentation.py
 ```
 

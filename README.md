@@ -16,6 +16,8 @@ You can quickly install and run the code with the `demo datasets` and `pretraine
 
 ### Use pip3 to install code
 ```
+conda create -n codetest python=3.9
+conda activate codetest
 pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
 ```
 

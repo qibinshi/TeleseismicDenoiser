@@ -14,7 +14,7 @@ Modified the paths on the [directories] section to match your computer.
 
 You can quickly install and run the code with the `demo datasets` and `pretrained models` in the package. 
 
-### Use pip3 to install code
+### Installation
 
 If you like using `conda` to manage virtual environments, 
 ```

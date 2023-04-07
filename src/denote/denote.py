@@ -8,14 +8,15 @@ data augmented on the fly.
 """
 
 import os
-import h5py
 import copy
+import h5py
+import time
 import torch
 import random
 import matplotlib
+import numpy as np
 import configparser
 import pkg_resources
-import numpy as np
 import torch.nn as nn
 from functools import partial
 from multiprocessing import Pool
@@ -23,9 +24,10 @@ from numpy.random import default_rng
 from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from .denoiser_util import mkdir, write_progress, waveform_fft
+from .autoencoder_1D_models_torch import T_model, SeismogramEncoder
+from .autoencoder_1D_models_torch import SeismogramDecoder, SeisSeparator
 from .torch_tools import try_gpu, CCMSELoss, Explained_Variance_score, CCLoss
 from .torch_tools import WaveformDataset, training_loop_branches_augmentation
-from .autoencoder_1D_models_torch import T_model, SeismogramEncoder, SeismogramDecoder, SeisSeparator
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 matplotlib.rcParams.update({'font.size': 12})
@@ -35,81 +37,83 @@ def train(configure_file='config.ini'):
     config = configparser.ConfigParser()
     config.read(configure_file)
 
-    transfer = config.getint('training', 'transfer')
-    gpu = config.getint('training', 'gpu')
-    gpu_ids = config.get('training', 'gpu_ids')
-    gpu_ids = [int(x) for x in gpu_ids.split(',')]
     storage_home = config.get('directories', 'storage_home')
     data_dir = storage_home + config.get('directories', 'data_dir')
     model_dir = storage_home + config.get('directories', 'save_model_dir')
+
     data_file = config.get('data', 'data_file')
-    use_demo = config.getint('data', 'use_demo')
-    half_length = config.getint('data', 'half_length')
-    strmax = config.getint('data', 'stretch_max')
-    npts = config.getint('data', 'npts')
-    branch_signal = config.get('data', 'branch_signal')
     branch_noise = config.get('data', 'branch_noise')
-    train_size = config.getfloat('training', 'train_size')
-    test_size = config.getfloat('training', 'test_size')
-    rand_seed1 = config.getint('training', 'rand_seed1')
-    rand_seed2 = config.getint('training', 'rand_seed2')
-    batch_size = config.getint('training', 'batch_size')
+    branch_signal = config.get('data', 'branch_signal')
+    npts = config.getint('data', 'npts')
+    strmax = config.getint('data', 'stretch_max')
+    use_demo = config.getint('data', 'use_demo')
+    rand_seed1 = config.getint('data', 'rand_seed1')
+    rand_seed2 = config.getint('data', 'rand_seed2')
+    half_length = config.getint('data', 'half_length')
+    test_size = config.getfloat('data', 'test_size')
+    train_size = config.getfloat('data', 'train_size')
+
+    gpu = config.getint('training', 'gpu')
+    gpu_ids = config.get('training', 'gpu_ids')
+    gpu_ids = [int(x) for x in gpu_ids.split(',')]
+    transfer = config.getint('training', 'transfer')
+
     lr = config.getfloat('training', 'learning_rate')
     epochs = config.getint('training', 'epochs')
-    minimum_epochs = config.getint('training', 'minimum_epochs')
     patience = config.getint('training', 'patience')
+    batch_size = config.getint('training', 'batch_size')
+    minimum_epochs = config.getint('training', 'minimum_epochs')
+
+    demo_train_data = pkg_resources.resource_filename(__name__, 'datasets/demo_train_dataset.hdf5')
     pre_trained_denote = pkg_resources.resource_filename(__name__, 'pretrained_models/Denote_weights.pth')
     pre_trained_WaveDecompNet = pkg_resources.resource_filename(__name__, 'pretrained_models/WaveDecompNet_weights.pth')
-    demo_train_data = pkg_resources.resource_filename(__name__, 'datasets/demo_train_dataset.hdf5')
 
     if use_demo:
         wave_raw = demo_train_data
     else:
         wave_raw = data_dir + data_file
 
-    print('transfer', transfer)
-    print('gpu', gpu)
-    print('use demo data', use_demo)
-    print('dataset path', wave_raw)
-    print('directory to save model', model_dir)
-    print('half of the length of waveform', half_length)
-    print('fraction for training', train_size)
-    print('fraction for testing', test_size * (1 - train_size))
-    print('random seeds', rand_seed1, rand_seed2)
-    print('batch size', batch_size)
-    print('learning rate', lr)
-    print('# epochs', epochs)
-    print('min. # epochs', minimum_epochs)
-    print('patience before stopping', patience)
-    print('gpu IDs', gpu_ids)
+    print('#' * 12 + ' Configuration Information ' + '#' * 12)
+    print('Master GPU #', gpu, '| GPU IDs', gpu_ids)
+    print('Use demo data', use_demo)
+    print('Training data', wave_raw)
+    print('Length of waveform', half_length*2)
+    print('Directory to save model', model_dir)
+    print('Fraction for training and testing', train_size, test_size * (1 - train_size))
 
-    mid_pt = half_length
+    print('Transfer learning option', transfer)
+    print('Learning rate', lr)
+    print('Batch size of training', batch_size)
+    print('Min. and Max. # epochs', minimum_epochs, epochs)
+    print('Patience before stopping', patience)
 
     progress_file = model_dir + '/Running_progress.txt'
     mkdir(model_dir)
     frac = 0.1  # starting fraction not included in shifting window
+    mid_pt = half_length
     weighted_loss = False
     bottleneck_name = 'LSTM'
     model_structure = "Branch_Encoder_Decoder"
     model_name = model_structure + "_" + bottleneck_name
 
-    print("#" * 12 + " Load and split data " + "#" * 12)
+    ########### %% Data %% #############
+    print("\n" + "#" * 12 + " Load and split data " + "#" * 12)
     # %% Read the pre-processed dataset and split into train, validate and test sets
     training_data, validate_data, test_data = read_split_data(wave_raw, branch_signal, branch_noise, npts,
                                                               train_size, test_size, rand_seed1, rand_seed2)
 
+    test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
     train_iter = DataLoader(training_data, batch_size=batch_size, shuffle=False)
     validate_iter = DataLoader(validate_data, batch_size=batch_size, shuffle=False)
-    test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-    # %% Fix seed for model initialization
+    # %% Fixed seeds for model initialization
     random.seed(0)
     np.random.seed(20)
     torch.manual_seed(99)
     torch.backends.cudnn.benchmark = False
 
-    ############ %% Neural Net structure %% ###############
-    print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
+    ############ %% Neural Net %% ###############
+    print("#" * 12 + " Building model " + model_name + " " + "#" * 12)
     devc = try_gpu(i=gpu)
 
     # %% construct a WaveDecompNet kernel first
@@ -160,13 +164,12 @@ def train(configure_file='config.ini'):
             n_para += np.prod(param.shape)
     print(f'Number of parameters to be trained: {n_para}\n')
 
-    # %% Hyper-parameters for training
+    # %% optimization setups
     loss_fn = CCMSELoss(use_weight=weighted_loss)
     optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
 
-    # %% Loop for training
-    print("#" * 12 + " training model " + model_name + " " + "#" * 12)
-
+    ############ %% Training loop %% ###############
+    print("#" * 12 + " Training " + model_name + " " + "#" * 12)
     model, avg_train_losses, avg_valid_losses, partial_loss = training_loop_branches_augmentation(train_iter,
                                                                                                   validate_iter,
                                                                                                   model,
@@ -179,8 +182,10 @@ def train(configure_file='config.ini'):
                                                                                                     npts=npts,
                                                                                                   mid_pt=mid_pt,
                                                                                                   strmax=strmax)
+
+    formatted_time = time.ctime(time.time())
     print("Training is done!")
-    write_progress(progress_file, text_contents="Training is done!" + '\n')
+    write_progress(progress_file, text_contents="Training is done at " + str(formatted_time) + '!\n')
 
     # %% Save the model
     if torch.cuda.device_count() > gpu and torch.cuda.device_count() > 1:
@@ -278,32 +283,28 @@ def test(configure_file='config.ini'):
     config = configparser.ConfigParser()
     config.read(configure_file)
 
-    retrain = config.getint('testing', 'retrain')
-    retrained_weights = config.get('testing', 'retrained_weights')
-    gpu = config.getint('training', 'gpu')
-    gpu_ids = config.get('training', 'gpu_ids')
-    gpu_ids = [int(x) for x in gpu_ids.split(',')]
     storage_home = config.get('directories', 'storage_home')
     data_dir = storage_home + config.get('directories', 'data_dir')
     model_dir = storage_home + config.get('directories', 'save_model_dir')
-    data_file = config.get('data', 'data_file')
-    use_demo = config.getint('data', 'use_demo')
-    half_length = config.getint('data', 'half_length')
-    strmax = config.getint('data', 'stretch_max')
-    npts = config.getint('data', 'npts')
-    branch_signal = config.get('data', 'branch_signal')
-    branch_noise = config.get('data', 'branch_noise')
-    train_size = config.getfloat('training', 'train_size')
-    test_size = config.getfloat('training', 'test_size')
-    rand_seed1 = config.getint('training', 'rand_seed1')
-    rand_seed2 = config.getint('training', 'rand_seed2')
+
     batch_size = config.getint('testing', 'batch_size')
-    lr = config.getfloat('training', 'learning_rate')
-    epochs = config.getint('training', 'epochs')
-    minimum_epochs = config.getint('training', 'minimum_epochs')
-    patience = config.getint('training', 'patience')
-    pre_trained_denote = pkg_resources.resource_filename(__name__, 'pretrained_models/Denote_weights.pth')
+    retrain = config.getint('testing', 'retrain')
+    retrained_weights = config.get('testing', 'retrained_weights')
+
+    data_file = config.get('data', 'data_file')
+    branch_noise = config.get('data', 'branch_noise')
+    branch_signal = config.get('data', 'branch_signal')
+    npts = config.getint('data', 'npts')
+    strmax = config.getint('data', 'stretch_max')
+    use_demo = config.getint('data', 'use_demo')
+    rand_seed1 = config.getint('data', 'rand_seed1')
+    rand_seed2 = config.getint('data', 'rand_seed2')
+    half_length = config.getint('data', 'half_length')
+    test_size = config.getfloat('data', 'test_size')
+    train_size = config.getfloat('data', 'train_size')
+
     demo_train_data = pkg_resources.resource_filename(__name__, 'datasets/demo_train_dataset.hdf5')
+    pre_trained_denote = pkg_resources.resource_filename(__name__, 'pretrained_models/Denote_weights.pth')
 
     if use_demo:
         wave_raw = demo_train_data
@@ -311,35 +312,27 @@ def test(configure_file='config.ini'):
         wave_raw = data_dir + data_file
 
     if retrain:
-        denote_weights = retrained_weights
+        denote_weights = model_dir + retrained_weights
     else:
         denote_weights = pre_trained_denote
 
-    print('gpu', gpu)
-    print('use demo data', use_demo)
-    print('dataset path', wave_raw)
-    print('directory to load your model', model_dir)
-    print('half of the length of waveform', half_length)
-    print('fraction for training', train_size)
-    print('fraction for testing', test_size * (1 - train_size))
-    print('random seeds', rand_seed1, rand_seed2)
-    print('batch size', batch_size)
-    print('learning rate', lr)
-    print('# epochs', epochs)
-    print('min. # epochs', minimum_epochs)
-    print('patience before stopping', patience)
-    print('gpu IDs', gpu_ids)
-
-    mid_pt = half_length
+    print('#' * 12 + ' Configuration Information ' + '#' * 12)
+    print('Use demo data', use_demo)
+    print('Training data', wave_raw)
+    print('Length of waveform', half_length * 2)
+    print('Directory to load model', model_dir)
+    print('Fraction for training and testing', train_size, test_size * (1 - train_size))
 
     fig_dir = model_dir + '/figures'
     mkdir(fig_dir)
     dt = 0.1
     frac = 0.45  # smallest window start
+    mid_pt = half_length
     bottleneck_name = 'LSTM'
     model_structure = "Branch_Encoder_Decoder"
     model_name = model_structure + "_" + bottleneck_name
 
+    ########### %% Data %% #############
     print("#" * 12 + " Load and split data " + "#" * 12)
     # %% Read the pre-processed dataset and split into train, validate and test sets
     training_data, validate_data, test_data = read_split_data(wave_raw, branch_signal, branch_noise, npts,
@@ -351,7 +344,7 @@ def test(configure_file='config.ini'):
 
     test_iter = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-    ############ %% Neural Net structure %% ###############
+    ############ %% Neural Net %% ###############
     print("#" * 12 + " Loading model " + model_name + " " + "#" * 12)
     devc = torch.device('cpu')
 
@@ -365,7 +358,7 @@ def test(configure_file='config.ini'):
     model.load_state_dict(torch.load(denote_weights, map_location=devc))
     model.eval()
 
-
+    ############ %% Testing %% ###############
     print("#" * 12 + " Augment data and feed to the model " + "#" * 12)
     print("start, end, squeezing ratio")
     with torch.no_grad():
@@ -468,28 +461,33 @@ def predict(configure_file='config.ini'):
     config = configparser.ConfigParser()
     config.read(configure_file)
 
-    retrain = config.getint('testing', 'retrain')
-    retrained_weights = config.get('testing', 'retrained_weights')
     storage_home = config.get('directories', 'storage_home')
-    use_demo = config.getint('prediction', 'use_demo')
-    data_wave = storage_home + config.get('prediction', 'data_wave')
+    data_dir = storage_home + config.get('directories', 'data_dir')
+    model_dir = storage_home + config.get('directories', 'save_model_dir')
     rslt_dir = storage_home + config.get('prediction', 'result_dir')
+
     data_key = config.get('prediction', 'data_key')
-    sample_index = config.getint('prediction', 'sample_index')
-    npts = config.getint('prediction', 'npts')
+    data_wave = config.get('prediction', 'data_wave')
+    retrained_weights = config.get('testing', 'retrained_weights')
+
+    npts = config.getint('data', 'npts')
+    retrain = config.getint('testing', 'retrain')
+    use_demo = config.getint('prediction', 'use_demo')
     start_pt = config.getint('prediction', 'start_point')
-    pre_trained_denote = pkg_resources.resource_filename(__name__, 'pretrained_models/Denote_weights.pth')
+    sample_index = config.getint('prediction', 'sample_index')
+
     demo_noisy_input = pkg_resources.resource_filename(__name__, 'datasets/demo_noisy_input.hdf5')
+    pre_trained_denote = pkg_resources.resource_filename(__name__, 'pretrained_models/Denote_weights.pth')
 
     if retrain:
-        denote_weights = retrained_weights
+        denote_weights = model_dir + retrained_weights
     else:
         denote_weights = pre_trained_denote
 
     if use_demo:
         wave_raw = demo_noisy_input
     else:
-        wave_raw = data_wave
+        wave_raw = data_dir + data_wave
 
     mkdir(rslt_dir)
     dt = 0.1

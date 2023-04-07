@@ -464,7 +464,7 @@ def predict(configure_file='config.ini'):
     storage_home = config.get('directories', 'storage_home')
     data_dir = storage_home + config.get('directories', 'data_dir')
     model_dir = storage_home + config.get('directories', 'save_model_dir')
-    rslt_dir = storage_home + config.get('prediction', 'result_dir')
+    rslt_dir = storage_home + config.get('directories', 'result_dir')
 
     data_key = config.get('prediction', 'data_key')
     data_wave = config.get('prediction', 'data_wave')

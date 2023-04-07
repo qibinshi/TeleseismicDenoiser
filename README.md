@@ -61,23 +61,3 @@ The code split the training data into train, validate and test sets. The executa
 ### Noisy application data
 (link to application data)
 Key 'quake': Create an numpy array with shape of (X, 3000, 3). It represent X recordings of 3-component earthquake waveforms, of which each trace has 3,000 sampling points. Our default sampling rate is 10 Hz. Hence the length of each waveform is 300 seconds.
-
-
-
-## (Optional) Download the source code and install all the dependencies
-### Prerequisite: Anaconda environment.
-```
-conda create -n myenv python=3.9
-conda activate myenv
-```
-### Prerequisite: Essential modules in the recommended order.
-```
-conda install h5py
-conda install pytorch -c pytorch
-conda install scipy
-conda install obspy -c conda-forge
-conda install scikit-learn
-conda install pandas
-conda install -c gprieto multitaper / pip install multitaper
-```
-

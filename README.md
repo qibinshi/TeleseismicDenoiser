@@ -1,7 +1,8 @@
 # Teleseismic Denoiser
 Cite the code [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199)
 
-Separate earthquake signals and noises on teleseismic waveform recordings using a two-branch U-net trained with global teleseismic data.
+This package uses auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
+For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser.
 The Denoiser uses the pretrained kernel [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) to learn high-level features.
 
 ## 0. Configuration file

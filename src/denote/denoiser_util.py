@@ -7,6 +7,7 @@ import glob
 import h5py
 import torch
 import matplotlib
+import pkg_resources
 import numpy as np
 import pandas as pd
 import scipy.signal as sgn
@@ -1073,7 +1074,8 @@ def mkdir(dir_path):
 
 def get_vp_vs(depth, vmodel='PREM.txt'):
     #
-    table = np.loadtxt(vmodel)
+    model_path = pkg_resources.resource_filename(__name__, 'datasets/')
+    table = np.loadtxt(model_path + vmodel)
     deps = table[:, 0]
     vps = table[deps < depth, 1]
     vss = table[deps < depth, 2]

@@ -1,5 +1,6 @@
 # Teleseismic Denoiser
 Cite the code [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199)
+Cite the datasets [![DOI](https://doi.org/10.6069/69E7-6667)](https://doi.org/10.6069/69E7-6667)
 
 This package uses auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
 For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser.

@@ -1,7 +1,7 @@
 # Teleseismic Denoiser
 Cite the code [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199)
 
-Cite the datasets [![DOI](https://doi.org/10.6069/69E7-6667)](https://doi.org/10.6069/69E7-6667)
+Cite the datasets [![DOI](https://img.shields.io/badge/DOI-10.6069%2F69E7--6667-blue)](https://doi.org/10.6069/69E7-6667)
 
 
 

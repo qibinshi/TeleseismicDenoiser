@@ -68,6 +68,7 @@ The noisy input data for application is in H5py with a signal key `quake`.
 
 Our big training and application datasets can be downloaded with the link provided below.
 Please cite our data using the following DOI: https://doi.org/10.6069/69E7-6667
+
 We process and assemble the waveform data using the FDSN client. See the [list of DOIs of the original data](http://dasway.ess.washington.edu/qibins/Seismic_network_DOI_list.txt). 
 
 

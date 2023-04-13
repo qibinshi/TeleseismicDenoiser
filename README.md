@@ -62,7 +62,9 @@ We use H5py for waveform data.
 The training data is in H5py format with the keys `quake` and `noise`. 
 The noisy input data for application is in H5py with a signal key `quake`.
 
-Our big training and application datasets can be downloaded with the link provided below:
+Our big training and application datasets can be downloaded with the link provided below.
+Please cite our data using the following DOI: https://doi.org/10.6069/69E7-6667
+
 
 ### Training data:
 [Our big dataset of high-SNR teleseismic waveforms for M6+ earthquakes](http://dasway.ess.washington.edu:9000/qibins/Psnr25_lp4_2000-2021.hdf5)

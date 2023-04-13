@@ -1,6 +1,9 @@
 # Teleseismic Denoiser
 Cite the code [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199)
+
 Cite the datasets [![DOI](https://doi.org/10.6069/69E7-6667)](https://doi.org/10.6069/69E7-6667)
+
+
 
 This package uses auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
 For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser.
@@ -68,7 +71,7 @@ Please cite our data using the following DOI: https://doi.org/10.6069/69E7-6667
 
 
 ### Training data:
-[Our big dataset of high-SNR teleseismic waveforms for M6+ earthquakes](http://dasway.ess.washington.edu:9000/qibins/Psnr25_lp4_2000-2021.hdf5)
+[Our big dataset of high-SNR teleseismic waveforms for M6+ earthquakes](http://dasway.ess.washington.edu/qibins/Psnr25_lp4_2000-2021.hdf5)
 
 Key `quake`: A numpy array with shape of (X, 50000, 3). 
 It represent X recordings of 3-component earthquake waveforms, 
@@ -85,7 +88,7 @@ The executables `denote_train` and `denote_test` are both run with the training 
 2. The names of keys can vary, with `config.ini` modified accordingly.
 
 ### Noisy application data
-[Our big dataset of teleseismic waveforms for M6 deep earthquakes including both high- and low-SNR data](http://dasway.ess.washington.edu:9000/qibins/M6_deep100km_P.hdf5)
+[Our big dataset of teleseismic waveforms for M6 deep earthquakes including both high- and low-SNR data](http://dasway.ess.washington.edu/qibins/M6_deep100km_P.hdf5)
 
 
 Key `quake`: A numpy array with shape of (X, 3000, 3). 

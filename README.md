@@ -30,7 +30,7 @@ pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
 
 1. Download/copy `tests/config.ini` to your work directory. 
 
-2. It allows you to manage the directories , data shape, model size and training strategies. 
+2. It allows you to manage the directories (absolute path!) , data shape, model size and training strategies. 
 Modified the [directories] section to match your computer. 
 
 3. Specify in section [data] and [prediction] whether you would like to run with the `demo datasets` in the package or

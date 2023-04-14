@@ -35,7 +35,6 @@ Modified the [directories] section to match your computer.
 
 3. Specify in section [data] and [prediction] whether you would like to run with the `demo datasets` in the package or
 the larger dataset ([download](#data-prep) or prepare your own data). 
-Download/copy `tests/config.ini` to your work directory. 
 
 
 

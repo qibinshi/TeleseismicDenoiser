@@ -155,6 +155,7 @@ def train(configure_file='config.ini'):
             model.to(devc)
         else:
             model.load_state_dict(torch.load(pre_trained_WaveDecompNet, map_location=devc))
+            model = T_model(model, half_insize=int(npts / 2))
 
     n_para = 0
     for idx, param in enumerate(model.parameters()):

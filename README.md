@@ -55,7 +55,7 @@ To predict from the demo noisy data
 ```
 denote_predict
 ```
-The code has been tested on various UNIX machines. If the code does not run, check your directories (absolute path) and your environment.
+The code has been tested on various UNIX machines with both CPU and GPUs. If the code does not run, check your directories (absolute path) and your environment.
 
 
 ## Prepare the full dataset for a complete study <a name="data-prep"></a>

@@ -63,7 +63,7 @@ The code has been tested on various UNIX machines with both CPU and GPUs. If the
 ## Prepare the full dataset for a complete study <a name="data-prep"></a>
 You can either download our training data for testing the performance or 
 prepare your own dataset following the data format to do a transfer learning. 
-We use H5py for waveform data. 
+We use the H5py format for waveform data. 
 The training data is in H5py format with the keys `quake` and `noise`. 
 The noisy input data for application is in H5py with a signal key `quake`.
 

@@ -67,10 +67,12 @@ We use the H5py format for waveform data.
 The training data is in H5py format with the keys `quake` and `noise`. 
 The noisy input data for application is in H5py with a signal key `quake`.
 
-Our big training and application datasets can be downloaded with the links provided below.
-Please cite our data using the following DOI:10.6069/69E7-6667
 
-We process and assemble the waveform data using the FDSN client. See the [list of DOIs of the original data](http://dasway.ess.washington.edu/qibins/Seismic_network_DOI_list.txt). 
+
+We process and assemble the waveform data using the FDSN client. 
+See the [list of DOIs of the original data](http://dasway.ess.washington.edu/qibins/Seismic_network_DOI_list.txt). 
+Our datasets can be downloaded with the links provided below.
+Please cite our data using the following DOI:10.6069/69E7-6667
 
 
 ### Training data:

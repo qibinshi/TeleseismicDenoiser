@@ -40,7 +40,7 @@ the larger dataset ([download](#data-prep) or prepare your own data).
 
 ## Run executables to test the package
 
-You can run the code with the `demo datasets` and `pretrained models` in the package. 
+The default option specified in `config.ini` is to run the code with the `demo datasets` and `pretrained models` in the package. 
 
 In your work directory, run the executables for quick tests:
 

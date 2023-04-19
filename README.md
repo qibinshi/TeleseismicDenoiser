@@ -5,8 +5,9 @@ Cite the datasets [![DOI](https://img.shields.io/badge/DOI-10.6069%2F69E7--6667-
 
 
 
-This package uses auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
-For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser.
+This package uses the auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
+For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser. We recommend 
+both the direct use of the denoiser and further transfter-learning with your own datasets.
 The denoiser uses the pretrained kernel 
 [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) 
 to learn high-level features.

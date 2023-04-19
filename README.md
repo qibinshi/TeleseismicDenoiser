@@ -41,7 +41,8 @@ the larger dataset ([download](#data-prep) or prepare your own data).
 ## Run executables to test the package
 
 You can run the code with the `demo datasets` and `pretrained models` in the package. 
-In the same directory, run the executables for quick tests:
+
+In your work directory, run the executables for quick tests:
 
 To train the model with demo data
 ```

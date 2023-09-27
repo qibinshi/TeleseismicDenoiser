@@ -1,8 +1,12 @@
 # Teleseismic Denoiser
 Cite the code [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199)
 
+Qibin Shi, Marine Denolle. Improved observations of deep earthquake ruptures using machine learning. ESS Open Archive . July 09, 2023.
+DOI: 10.22541/essoar.168889869.98015524/v1
+
 Cite the datasets [![DOI](https://img.shields.io/badge/DOI-10.6069%2F69E7--6667-blue)](https://doi.org/10.6069/69E7-6667)
 
+Shi, Q., & Denolle, M. (2023). Training Data of the Waveform Denoiser to separate teleseismic earthquake and noise signals [Data set]. UW photonic sensing facility. https://doi.org/10.6069/69E7-6667
 
 
 This package uses the auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.

@@ -74,13 +74,13 @@ The noisy input data for application is in H5py with a signal key `quake`.
 
 
 We process and assemble the waveform data using the FDSN client. 
-See the [list of DOIs of the original data](https://dasway.ess.washington.edu/qibins/Seismic_network_DOI_list.txt). 
+See the [list of DOIs of the original data](https://dasway.ess.washington.edu/shared/qibins/Seismic_network_DOI_list.txt). 
 Our datasets can be downloaded with the links provided below.
 
 
 
 ### Training data:
-[Big dataset of high-SNR teleseismic waveforms for M6+ earthquakes](https://dasway.ess.washington.edu/qibins/Psnr25_lp4_2000-2021.hdf5)
+[Big dataset of high-SNR teleseismic waveforms for M6+ earthquakes](https://dasway.ess.washington.edu/shared/qibins/Psnr25_lp4_2000-2021.hdf5)
 
 Key `quake`: A numpy array with shape of (X, 50000, 3). 
 It represent X recordings of 3-component earthquake waveforms, 
@@ -97,7 +97,7 @@ The executables `denote_train` and `denote_test` are both run with the training 
 2. The names of keys can vary, with `config.ini` modified accordingly.
 
 ### Noisy application data
-[Big dataset of teleseismic waveforms for M6 deep earthquakes including both high- and low-SNR data](https://dasway.ess.washington.edu/qibins/metadata_M6_deep100km_allSNR_P.csv)
+[Big dataset of teleseismic waveforms for M6 deep earthquakes including both high- and low-SNR data](https://dasway.ess.washington.edu/shared/qibins/metadata_M6_deep100km_allSNR_P.csv)
 
 
 Key `quake`: A numpy array with shape of (X, 3000, 3). 

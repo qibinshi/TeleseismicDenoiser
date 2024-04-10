@@ -97,7 +97,7 @@ The executables `denote_train` and `denote_test` are both run with the training 
 2. The names of keys can vary, with `config.ini` modified accordingly.
 
 ### Noisy application data
-[Big dataset of teleseismic waveforms for M6 deep earthquakes including both high- and low-SNR data](https://dasway.ess.washington.edu/shared/qibins/metadata_M6_deep100km_allSNR_P.csv)
+[Big dataset of teleseismic waveforms for M5 deep earthquakes including both high- and low-SNR data](https://dasway.ess.washington.edu/shared/qibins/deepquake_M5_6_data_metadata.zip)
 
 
 Key `quake`: A numpy array with shape of (X, 3000, 3). 

@@ -1,8 +1,7 @@
 # Teleseismic Denoiser
 [![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199) Methodology and this package.
 
-Qibin Shi, Marine Denolle. Improved observations of deep earthquake ruptures using machine learning. ESS Open Archive . July 09, 2023.
-DOI: 10.22541/essoar.168889869.98015524/v1
+Shi, Q. and Denolle, M.A., 2023. Improved observations of deep earthquake ruptures using machine learning. Journal of Geophysical Research: Solid Earth, 128(12), p.e2023JB027334.
 
 [![DOI](https://img.shields.io/badge/DOI-10.6069%2F69E7--6667-blue)](https://doi.org/10.6069/69E7-6667) Datasets
 

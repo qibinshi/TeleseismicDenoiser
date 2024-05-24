@@ -1,16 +1,11 @@
 # Teleseismic Denoiser
-[![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199) Methodology and this package.
-
 Shi, Q. and Denolle, M.A., 2023. Improved observations of deep earthquake ruptures using machine learning. Journal of Geophysical Research: Solid Earth, 128(12), p.e2023JB027334.
 
+[![DOI](https://zenodo.org/badge/496703199.svg)](https://zenodo.org/badge/latestdoi/496703199) Code
 [![DOI](https://img.shields.io/badge/DOI-10.6069%2F69E7--6667-blue)](https://doi.org/10.6069/69E7-6667) Datasets
 
-Shi, Q., & Denolle, M. (2023). Training Data of the Waveform Denoiser to separate teleseismic earthquake and noise signals [Data set]. UW photonic sensing facility. https://doi.org/10.6069/69E7-6667
-
-
 This package uses the auto-encoder neural network to separate teleseismic earthquake and noise waveform recordings.
-For earthquake studies, this deep neural network can be considered as a multi-scale and multi-task denoiser. We recommend 
-both the direct use of the denoiser and further transfter-learning with your own datasets.
+We recommend both the direct use of the denoiser and transfter-learning with your own datasets.
 The denoiser uses the pretrained kernel 
 [WaveDecompNet(Yin et al 2022)](https://github.com/yinjiuxun/WaveDecompNet-paper/) 
 to learn high-level features.
@@ -34,8 +29,8 @@ pip install git+https://github.com/qibinshi/TeleseismicDenoiser.git
 
 1. Download/copy `tests/config.ini` to your work directory. 
 
-2. It allows you to manage the directories (absolute path!) , data shape, model size and training strategies. 
-Modified the [directories] section to match your computer. 
+2. It allows you to manage the directories, data shape, model size and training strategies. 
+Modify the [directories] section to match your computer. 
 
 3. Specify in section [data] and [prediction] whether you would like to run with the `demo datasets` in the package or
 the larger dataset ([download](#data-prep) or prepare your own data). 
@@ -60,7 +55,6 @@ To predict from the demo noisy data
 ```
 denote_predict
 ```
-The code has been tested on various UNIX machines with both CPU and GPUs. If the code does not run, check your directories (absolute path) and your environment.
 
 
 ## Prepare the full dataset for a complete study <a name="data-prep"></a>
@@ -71,11 +65,9 @@ The training data is in H5py format with the keys `quake` and `noise`.
 The noisy input data for application is in H5py with a signal key `quake`.
 
 
-
 We process and assemble the waveform data using the FDSN client. 
 See the [list of DOIs of the original data](https://dasway.ess.washington.edu/shared/qibins/Seismic_network_DOI_list.txt). 
 Our datasets can be downloaded with the links provided below.
-
 
 
 ### Training data:
